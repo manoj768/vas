@@ -23,6 +23,9 @@ import {
   Plus,
   Building2,
   FileCode,
+  Pencil,
+  X,
+  Save,
 } from "lucide-react";
 import { ValuationCase, OnboardedInstitution } from "../types";
 import { BankReportGeneratorStudio } from "./BankReportGeneratorStudio";
@@ -63,6 +66,66 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
     message: string;
   } | null>(null);
   const [isSubmittingInst, setIsSubmittingInst] = useState(false);
+
+  // Edit Institution state
+  const [editingInst, setEditingInst] = useState<OnboardedInstitution | null>(null);
+  const [editInstName, setEditInstName] = useState("");
+  const [editInstCode, setEditInstCode] = useState("");
+  const [editInstCategory, setEditInstCategory] = useState("Housing Finance Co");
+  const [editInstEmail, setEditInstEmail] = useState("");
+  const [editInstPhone, setEditInstPhone] = useState("");
+  const [editInstLtv, setEditInstLtv] = useState("80%");
+  const [isSavingEditInst, setIsSavingEditInst] = useState(false);
+  const [editInstError, setEditInstError] = useState("");
+
+  const handleOpenEditInst = (inst: OnboardedInstitution) => {
+    setEditingInst(inst);
+    setEditInstName(inst.name);
+    setEditInstCode(inst.code);
+    setEditInstCategory(inst.category || "Housing Finance Co");
+    setEditInstEmail(inst.contactEmail || "");
+    setEditInstPhone(inst.contactPhone || "");
+    setEditInstLtv(inst.defaultLTV || "80%");
+    setEditInstError("");
+  };
+
+  const handleSaveEditInst = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInst) return;
+    setIsSavingEditInst(true);
+    setEditInstError("");
+
+    try {
+      const res = await fetch(`/api/institutions/${editingInst.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editInstName,
+          code: editInstCode,
+          category: editInstCategory,
+          contactEmail: editInstEmail,
+          contactPhone: editInstPhone,
+          defaultLTV: editInstLtv,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setInstitutions((prev) =>
+          prev.map((item) =>
+            item.id === editingInst.id ? { ...item, ...data.institution } : item
+          )
+        );
+        setEditingInst(null);
+      } else {
+        setEditInstError(data.message || "Failed to update institution");
+      }
+    } catch (err) {
+      setEditInstError("Failed to connect to server to update institution");
+    } finally {
+      setIsSavingEditInst(false);
+    }
+  };
 
   const fetchInstitutions = async () => {
     setIsLoadingInst(true);
@@ -148,17 +211,18 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   };
 
   const handleRemoveInstitution = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove "${name}" from onboarded list?`)) return;
+    // Optimistically remove card from state so UI updates instantly
+    setInstitutions((prev) => prev.filter((item) => item.id !== id));
     try {
       const res = await fetch(`/api/institutions/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (data.success) {
+      if (!data.success) {
         await fetchInstitutions();
-      } else {
         alert(data.message || "Failed to remove institution");
       }
     } catch (err) {
-      alert("Error deleting institution");
+      await fetchInstitutions();
+      alert("Error deleting institution from server");
     }
   };
 
@@ -1455,13 +1519,26 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                         </div>
                         <h4 className="font-bold text-white text-sm mt-1">{inst.name}</h4>
                       </div>
-                      <button
-                        onClick={() => handleRemoveInstitution(inst.id, inst.name)}
-                        className="text-slate-500 hover:text-red-400 p-1 transition-colors"
-                        title="Remove Institution"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditInst(inst)}
+                          className="bg-slate-900 hover:bg-cyan-950 text-slate-300 hover:text-cyan-300 px-2.5 py-1 rounded-lg border border-slate-800 hover:border-cyan-800 transition-all flex items-center gap-1 text-[10px] font-bold"
+                          title="Edit Institution Details"
+                        >
+                          <Pencil className="w-3 h-3 text-cyan-400" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInstitution(inst.id, inst.name)}
+                          className="bg-slate-900 hover:bg-red-950 text-slate-300 hover:text-red-400 px-2.5 py-1 rounded-lg border border-slate-800 hover:border-red-800 transition-all flex items-center gap-1 text-[10px] font-bold"
+                          title="Remove Institution"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
@@ -1513,6 +1590,129 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               </div>
             )}
           </div>
+
+          {/* EDIT INSTITUTION MODAL */}
+          {editingInst && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-cyan-950 text-cyan-400 rounded-xl border border-cyan-800">
+                      <Pencil className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-white">Edit Financial Institution</h3>
+                      <p className="text-[11px] text-slate-400 font-mono">ID: {editingInst.id}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingInst(null)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {editInstError && (
+                  <div className="bg-red-950/80 border border-red-800 p-2.5 rounded-xl text-xs text-red-300 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{editInstError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveEditInst} className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Institution Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={editInstName}
+                        onChange={(e) => setEditInstName(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Bank Code</label>
+                      <input
+                        type="text"
+                        required
+                        value={editInstCode}
+                        onChange={(e) => setEditInstCode(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-cyan-300 font-bold focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Category</label>
+                      <select
+                        value={editInstCategory}
+                        onChange={(e) => setEditInstCategory(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="Housing Finance Co">Housing Finance Co (HFC)</option>
+                        <option value="Public Sector Bank">Public Sector Bank (PSU)</option>
+                        <option value="Private Bank">Private Sector Bank</option>
+                        <option value="NBFC / Microfinance">NBFC / Microfinance</option>
+                        <option value="Cooperative Bank">Cooperative Bank</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">LTV Benchmark</label>
+                      <input
+                        type="text"
+                        value={editInstLtv}
+                        onChange={(e) => setEditInstLtv(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Empanelment Email</label>
+                      <input
+                        type="email"
+                        value={editInstEmail}
+                        onChange={(e) => setEditInstEmail(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Empanelment Phone</label>
+                      <input
+                        type="text"
+                        value={editInstPhone}
+                        onChange={(e) => setEditInstPhone(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setEditingInst(null)}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingEditInst}
+                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-2 rounded-xl text-xs transition-all shadow-lg flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingEditInst ? "Saving..." : "Save Changes"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

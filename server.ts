@@ -841,6 +841,71 @@ app.delete("/api/institutions/:id", (req, res) => {
   });
 });
 
+app.put("/api/institutions/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const inst = mockInstitutions.find((i) => i.id === id);
+    if (!inst) {
+      return res.status(404).json({ success: false, message: "Institution not found" });
+    }
+    const {
+      name,
+      code,
+      category,
+      contactEmail,
+      contactPhone,
+      defaultLTV,
+      status,
+      metaDocumentBase64,
+      metaDocumentName,
+      metaDocumentType,
+    } = req.body;
+
+    if (name) inst.name = name.trim();
+    if (code) inst.code = code.toUpperCase().trim();
+    if (category) inst.category = category;
+    if (contactEmail !== undefined) inst.contactEmail = contactEmail;
+    if (contactPhone !== undefined) inst.contactPhone = contactPhone;
+    if (defaultLTV !== undefined) inst.defaultLTV = defaultLTV;
+    if (status) inst.status = status;
+
+    if (metaDocumentBase64 && metaDocumentName) {
+      try {
+        const cleanBase64 = metaDocumentBase64.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(cleanBase64, "base64");
+        const ext =
+          metaDocumentType ||
+          (metaDocumentName.endsWith(".xlsx")
+            ? "xlsx"
+            : metaDocumentName.endsWith(".docx")
+            ? "docx"
+            : "docx");
+        const safeFilename = `${inst.name.replace(/[^a-zA-Z0-9]/g, "_")}_Meta_Template_${Date.now()}.${ext}`;
+        const filePath = path.join(process.cwd(), "uploads", "institutions", safeFilename);
+        fs.writeFileSync(filePath, buffer);
+        inst.metaDocument = {
+          filename: safeFilename,
+          originalName: metaDocumentName,
+          fileType: ext,
+          sizeBytes: buffer.length,
+          uploadedAt: new Date().toISOString(),
+          url: `/uploads/institutions/${safeFilename}`,
+        };
+      } catch (fileErr) {
+        console.error("Failed to update meta document:", fileErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Institution "${inst.name}" updated successfully`,
+      institution: inst,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: "Failed to update institution" });
+  }
+});
+
 // API Routes
 app.get("/api/cases", (req, res) => {
   res.json({ success: true, cases: mockCases });
