@@ -1,0 +1,6 @@
+{
+  "name": "ValPro Field Valuation Survey App",
+  "description": "Property evaluation and field survey inspection app with offline IndexedDB persistence, auto-sync, site visit forms, and appraisal reports.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
