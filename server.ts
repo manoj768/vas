@@ -35,7 +35,7 @@ interface BranchRecord {
   createdAt: string;
 }
 
-let mockBranches: BranchRecord[] = [
+const defaultBranches: BranchRecord[] = [
   {
     id: "BR-01",
     name: "Delhi NCR",
@@ -88,13 +88,37 @@ let mockBranches: BranchRecord[] = [
   },
 ];
 
-const registeredUsers: RegisteredUser[] = [
+function loadBranches() {
+  try {
+    if (fs.existsSync(branchesDataFilePath)) {
+      const data = fs.readFileSync(branchesDataFilePath, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error("Error reading branches.json:", err);
+  }
+  try {
+    fs.writeFileSync(branchesDataFilePath, JSON.stringify(defaultBranches, null, 2), "utf-8");
+  } catch (e) {}
+  return [...defaultBranches];
+}
+
+function saveBranches(data: any) {
+  try {
+    fs.writeFileSync(branchesDataFilePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing branches.json:", err);
+  }
+}
+
+let mockBranches: BranchRecord[] = loadBranches();
+
+const defaultUsers: RegisteredUser[] = [
   {
     id: "USR-004",
     name: "Pooja Gupta (System Administrator)",
     email: "admin@drrconsultants.in",
     phone: "9811223344",
-    // Hashed "Admin@12345"
     passwordHash: bcrypt.hashSync("Admin@12345", 10),
     role: "admin",
     branch: "Delhi NCR",
@@ -104,7 +128,6 @@ const registeredUsers: RegisteredUser[] = [
     name: "Ratnesh Kumar (Valuation Engineer)",
     email: "ratnesh.delhi@drrconsultants.in",
     phone: "9812345670",
-    // Hashed "Delhi@12345"
     passwordHash: bcrypt.hashSync("Delhi@12345", 10),
     role: "engineer",
     branch: "Delhi NCR",
@@ -114,7 +137,6 @@ const registeredUsers: RegisteredUser[] = [
     name: "Suresh Sharma (Branch Manager)",
     email: "suresh.lucknow@drrconsultants.in",
     phone: "9898989898",
-    // Hashed "Lucknow@12345"
     passwordHash: bcrypt.hashSync("Lucknow@12345", 10),
     role: "reviewer",
     branch: "Lucknow",
@@ -124,12 +146,36 @@ const registeredUsers: RegisteredUser[] = [
     name: "Anit Verma (Template Drafter)",
     email: "anit.drafter@drrconsultants.in",
     phone: "9876543211",
-    // Hashed "Drafter@12345"
     passwordHash: bcrypt.hashSync("Drafter@12345", 10),
     role: "drafter",
     branch: "Delhi NCR",
   }
 ];
+
+function loadUsers() {
+  try {
+    if (fs.existsSync(usersDataFilePath)) {
+      const data = fs.readFileSync(usersDataFilePath, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error("Error reading users.json:", err);
+  }
+  try {
+    fs.writeFileSync(usersDataFilePath, JSON.stringify(defaultUsers, null, 2), "utf-8");
+  } catch (e) {}
+  return [...defaultUsers];
+}
+
+function saveUsers(data: any) {
+  try {
+    fs.writeFileSync(usersDataFilePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing users.json:", err);
+  }
+}
+
+let registeredUsers: RegisteredUser[] = loadUsers();
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -148,8 +194,12 @@ if (!fs.existsSync(uploadsInstDir)) {
 // Serve uploaded media files static folder
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// In-memory data store for Onboarded Banks & Institutions (Managed via API & Administrator)
-let mockInstitutions = [
+// Persistent JSON Storage Helpers
+const instDataFilePath = path.join(process.cwd(), "uploads", "institutions.json");
+const branchesDataFilePath = path.join(process.cwd(), "uploads", "branches.json");
+const usersDataFilePath = path.join(process.cwd(), "uploads", "users.json");
+
+const defaultInstitutions = [
   {
     id: "INST-001",
     name: "Hinduja Housing Finance Limited",
@@ -239,6 +289,32 @@ let mockInstitutions = [
     createdAt: "2026-03-01T08:00:00Z",
   },
 ];
+
+function loadInstitutions() {
+  try {
+    if (fs.existsSync(instDataFilePath)) {
+      const data = fs.readFileSync(instDataFilePath, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error("Error reading institutions.json:", err);
+  }
+  try {
+    fs.writeFileSync(instDataFilePath, JSON.stringify(defaultInstitutions, null, 2), "utf-8");
+  } catch (e) {}
+  return [...defaultInstitutions];
+}
+
+function saveInstitutions(data: any) {
+  try {
+    fs.writeFileSync(instDataFilePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing institutions.json:", err);
+  }
+}
+
+// In-memory data store for Onboarded Banks & Institutions with JSON file backup
+let mockInstitutions = loadInstitutions();
 
 // In-memory data store for Evalo cases (seeded with realistic sample cases from PDF)
 let mockCases = [
@@ -591,6 +667,7 @@ app.post("/api/auth/register", (req, res) => {
     };
 
     registeredUsers.push(newUser);
+    saveUsers(registeredUsers);
 
     return res.json({
       success: true,
@@ -618,6 +695,7 @@ app.delete("/api/auth/users/:id", (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
     const removedUser = registeredUsers.splice(index, 1)[0];
+    saveUsers(registeredUsers);
     return res.json({ success: true, message: `Employee ${removedUser.name} removed successfully` });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: "Failed to delete user" });
@@ -638,6 +716,8 @@ app.put("/api/auth/users/:id", (req, res) => {
     if (role) user.role = role;
     if (branch) user.branch = branch;
     if (password) user.passwordHash = bcrypt.hashSync(password, 10);
+
+    saveUsers(registeredUsers);
 
     return res.json({
       success: true,
@@ -691,6 +771,7 @@ app.post("/api/branches", (req, res) => {
     };
 
     mockBranches.push(newBranch);
+    saveBranches(mockBranches);
     return res.json({ success: true, message: `Branch '${newBranch.name}' added successfully`, branch: newBranch });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: "Failed to create branch" });
@@ -712,6 +793,8 @@ app.put("/api/branches/:id", (req, res) => {
     if (manager) branch.manager = manager;
     if (status) branch.status = status;
 
+    saveBranches(mockBranches);
+
     return res.json({ success: true, message: "Branch updated successfully", branch });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: "Failed to update branch" });
@@ -726,6 +809,7 @@ app.delete("/api/branches/:id", (req, res) => {
       return res.status(404).json({ success: false, message: "Branch not found" });
     }
     const removed = mockBranches.splice(index, 1)[0];
+    saveBranches(mockBranches);
     return res.json({ success: true, message: `Branch '${removed.name}' removed successfully` });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: "Failed to delete branch" });
@@ -816,6 +900,7 @@ app.post("/api/institutions", (req, res) => {
     };
 
     mockInstitutions.unshift(newInst);
+    saveInstitutions(mockInstitutions);
 
     return res.json({
       success: true,
@@ -835,6 +920,7 @@ app.delete("/api/institutions/:id", (req, res) => {
     return res.status(404).json({ success: false, message: "Institution not found" });
   }
   const removed = mockInstitutions.splice(idx, 1)[0];
+  saveInstitutions(mockInstitutions);
   return res.json({
     success: true,
     message: `Institution "${removed.name}" removed from onboarded directory`,
@@ -895,6 +981,8 @@ app.put("/api/institutions/:id", (req, res) => {
         console.error("Failed to update meta document:", fileErr);
       }
     }
+
+    saveInstitutions(mockInstitutions);
 
     return res.json({
       success: true,

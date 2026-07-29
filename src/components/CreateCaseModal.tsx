@@ -116,7 +116,7 @@ export const CreateCaseModal: React.FC<CreateCaseModalProps> = ({
               )}
             </select>
             <p className="text-[10px] text-gray-500 mt-1 italic">
-              🔒 Selected bank name is verified against central onboarding records (<span className="font-mono text-gray-700">/api/institutions</span>) and will be locked as uneditable across all survey steps.
+              🔒 Selected bank name is verified against central onboarding records and will be locked as uneditable across all survey steps.
             </p>
           </div>
 

@@ -10,11 +10,11 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Download,
   Sparkles,
   Shield,
   Layers,
-  Database,
   UserCheck,
   Send,
   Zap,
@@ -41,10 +41,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   onNavigateToCase,
   onCreateCase,
 }) => {
-  const [activeTab, setActiveTab] = useState<"pipeline" | "institutions" | "templates" | "users" | "officepc" | "architecture">("pipeline");
-  const [officePcIp, setOfficePcIp] = useState<string>("http://192.168.1.100:3000");
-  const [publicTunnelUrl, setPublicTunnelUrl] = useState<string>("https://drr-valuation-office.trycloudflare.com");
-  const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"pipeline" | "institutions" | "templates" | "users">("pipeline");
 
   // Institution & Bank Onboarding API State
   const [institutions, setInstitutions] = useState<OnboardedInstitution[]>([]);
@@ -210,7 +207,11 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
     }
   };
 
-  const handleRemoveInstitution = async (id: string, name: string) => {
+  const handleRemoveInstitution = (id: string, name: string) => {
+    setDeleteConfirmTarget({ type: "institution", id, name });
+  };
+
+  const executeDeleteInstitution = async (id: string, name: string) => {
     // Optimistically remove card from state so UI updates instantly
     setInstitutions((prev) => prev.filter((item) => item.id !== id));
     try {
@@ -218,19 +219,14 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
       const data = await res.json();
       if (!data.success) {
         await fetchInstitutions();
-        alert(data.message || "Failed to remove institution");
+        setUserErrorMsg(data.message || "Failed to remove institution");
       }
     } catch (err) {
       await fetchInstitutions();
-      alert("Error deleting institution from server");
+      setUserErrorMsg("Error deleting institution from server");
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedUrl(true);
-    setTimeout(() => setCopiedUrl(false), 2000);
-  };
   const [selectedRole, setSelectedRole] = useState<"admin" | "engineer" | "drafter" | "reviewer">("admin");
   const [selectedBankTemplate, setSelectedBankTemplate] = useState<string>("SBI");
   const [selectedCaseForDraft, setSelectedCaseForDraft] = useState<ValuationCase | null>(
@@ -274,6 +270,15 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [branchErrorMsg, setBranchErrorMsg] = useState("");
   const [isCreatingBranch, setIsCreatingBranch] = useState(false);
 
+  const [editingBranch, setEditingBranch] = useState<any | null>(null);
+  const [editBranchName, setEditBranchName] = useState("");
+  const [editBranchCode, setEditBranchCode] = useState("");
+  const [editBranchAddress, setEditBranchAddress] = useState("");
+  const [editBranchPhone, setEditBranchPhone] = useState("");
+  const [editBranchManager, setEditBranchManager] = useState("");
+  const [editBranchStatus, setEditBranchStatus] = useState<"Active" | "Inactive">("Active");
+  const [isUpdatingBranch, setIsUpdatingBranch] = useState(false);
+
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -284,6 +289,20 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [userSuccessMsg, setUserSuccessMsg] = useState("");
   const [userErrorMsg, setUserErrorMsg] = useState("");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserEmail, setEditUserEmail] = useState("");
+  const [editUserPhone, setEditUserPhone] = useState("");
+  const [editUserRole, setEditUserRole] = useState<"engineer" | "drafter" | "reviewer" | "admin">("engineer");
+  const [editUserBranch, setEditUserBranch] = useState("");
+  const [editUserPassword, setEditUserPassword] = useState("");
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    type: "branch" | "user" | "institution";
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Fetch registered users and branches on mount
   useEffect(() => {
@@ -355,33 +374,133 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
     }
   };
 
-  const handleDeleteBranch = async (branchId: string, branchName: string) => {
-    if (!confirm(`Are you sure you want to delete branch '${branchName}'?`)) return;
+  const handleDeleteBranch = (branchId: string, branchName: string) => {
+    setDeleteConfirmTarget({ type: "branch", id: branchId, name: branchName });
+  };
+
+  const executeDeleteBranch = async (branchId: string, branchName: string) => {
+    setBranchErrorMsg("");
+    setBranchSuccessMsg("");
     try {
       const res = await fetch(`/api/branches/${branchId}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         setBranchesList((prev) => prev.filter((b) => b.id !== branchId));
+        setBranchSuccessMsg(`Branch '${branchName}' deleted successfully.`);
+        setTimeout(() => setBranchSuccessMsg(""), 3000);
       } else {
-        alert(data.message || "Failed to delete branch");
+        setBranchErrorMsg(data.message || "Failed to delete branch");
       }
     } catch (err) {
-      alert("Failed to delete branch");
+      setBranchErrorMsg("Error connecting to server to delete branch.");
     }
   };
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to remove employee '${userName}'?`)) return;
+  const handleUpdateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBranch) return;
+    setBranchErrorMsg("");
+    setBranchSuccessMsg("");
+    setIsUpdatingBranch(true);
+
+    try {
+      const res = await fetch(`/api/branches/${editingBranch.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editBranchName,
+          code: editBranchCode,
+          address: editBranchAddress,
+          phone: editBranchPhone,
+          manager: editBranchManager,
+          status: editBranchStatus,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setBranchSuccessMsg("Branch updated successfully!");
+        setBranchesList((prev) =>
+          prev.map((b) => (b.id === editingBranch.id ? data.branch : b))
+        );
+        setTimeout(() => {
+          setEditingBranch(null);
+          setBranchSuccessMsg("");
+        }, 1500);
+      } else {
+        setBranchErrorMsg(data.message || "Failed to update branch");
+      }
+    } catch (err: any) {
+      setBranchErrorMsg("Error connecting to server to update branch.");
+    } finally {
+      setIsUpdatingBranch(false);
+    }
+  };
+
+  const handleDeleteUser = (userId: string, userName: string) => {
+    setDeleteConfirmTarget({ type: "user", id: userId, name: userName });
+  };
+
+  const executeDeleteUser = async (userId: string, userName: string) => {
+    setUserErrorMsg("");
+    setUserSuccessMsg("");
     try {
       const res = await fetch(`/api/auth/users/${userId}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         setUsersList((prev) => prev.filter((u) => u.id !== userId));
+        setUserSuccessMsg(`Employee '${userName}' removed successfully.`);
+        setTimeout(() => setUserSuccessMsg(""), 3000);
       } else {
-        alert(data.message || "Failed to delete employee");
+        setUserErrorMsg(data.message || "Failed to delete employee");
       }
     } catch (err) {
-      alert("Failed to delete employee");
+      setUserErrorMsg("Error connecting to server to delete employee.");
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setUserErrorMsg("");
+    setUserSuccessMsg("");
+    setIsUpdatingUser(true);
+
+    try {
+      const payload: any = {
+        name: editUserName,
+        email: editUserEmail,
+        phone: editUserPhone,
+        role: editUserRole,
+        branch: editUserBranch,
+      };
+      if (editUserPassword) {
+        payload.password = editUserPassword;
+      }
+
+      const res = await fetch(`/api/auth/users/${editingUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setUserSuccessMsg("Employee updated successfully!");
+        setUsersList((prev) =>
+          prev.map((u) => (u.id === editingUser.id ? data.user : u))
+        );
+        setTimeout(() => {
+          setEditingUser(null);
+          setUserSuccessMsg("");
+        }, 1500);
+      } else {
+        setUserErrorMsg(data.message || "Failed to update employee");
+      }
+    } catch (err: any) {
+      setUserErrorMsg("Error connecting to server to update employee.");
+    } finally {
+      setIsUpdatingUser(false);
     }
   };
 
@@ -466,30 +585,30 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   };
 
   return (
-    <div id="admin-console-container" className="max-w-4xl mx-auto p-4 space-y-5 font-sans text-slate-100 pb-16">
+    <div id="admin-console-container" className="max-w-4xl mx-auto p-4 space-y-5 font-sans text-slate-900 pb-16">
       {/* Console Top Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2.5 py-0.5 rounded-full">
+            <span className="text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full">
               Enterprise Management
             </span>
-            <span className="text-[10px] font-bold text-slate-400 font-mono">DRR Enterprise Portal</span>
+            <span className="text-[10px] font-bold text-slate-500 font-mono">DRR Enterprise Portal</span>
           </div>
-          <h1 className="text-xl font-black text-white tracking-tight">
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">
             Valuation Management & Template Drafter
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 mt-0.5">
             Admin Web Console, Mobile Field App, Image Tagger & Bank Report Export
           </p>
         </div>
 
         {/* Role Switcher pills */}
-        <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center gap-1">
+        <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center gap-1 shadow-2xs">
           <button
             onClick={() => setSelectedRole("admin")}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedRole === "admin" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+              selectedRole === "admin" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             🏢 Admin
@@ -497,7 +616,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
           <button
             onClick={() => setSelectedRole("engineer")}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedRole === "engineer" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+              selectedRole === "engineer" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             👷 Engineer
@@ -505,7 +624,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
           <button
             onClick={() => setSelectedRole("drafter")}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedRole === "drafter" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+              selectedRole === "drafter" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             ✏️ Drafter
@@ -513,7 +632,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
           <button
             onClick={() => setSelectedRole("reviewer")}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              selectedRole === "reviewer" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+              selectedRole === "reviewer" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             🔍 Reviewer
@@ -522,25 +641,25 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex border-b border-slate-800 space-x-6 text-xs font-bold overflow-x-auto pb-1">
+      <div className="flex border-b border-slate-200 space-x-6 text-xs font-bold overflow-x-auto pb-1">
         <button
           onClick={() => setActiveTab("pipeline")}
           className={`pb-3 transition-colors whitespace-nowrap relative ${
-            activeTab === "pipeline" ? "text-cyan-400 font-black" : "text-slate-400 hover:text-slate-200"
+            activeTab === "pipeline" ? "text-blue-700 font-black" : "text-slate-600 hover:text-slate-900"
           }`}
         >
           Valuation Workflow Pipeline
-          {activeTab === "pipeline" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-t-full" />}
+          {activeTab === "pipeline" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
         </button>
 
         <button
           onClick={() => setActiveTab("institutions")}
           className={`pb-3 transition-colors whitespace-nowrap relative flex items-center gap-1.5 ${
-            activeTab === "institutions" ? "text-cyan-400 font-black" : "text-slate-400 hover:text-slate-200"
+            activeTab === "institutions" ? "text-blue-700 font-black" : "text-slate-600 hover:text-slate-900"
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          Bank Onboarding API & Meta Docs
+          Bank Onboarding & Format Specs
           {activeTab === "institutions" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-t-full" />}
         </button>
 
@@ -562,26 +681,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         >
           User & Engineer Management
           {activeTab === "users" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-t-full" />}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("officepc")}
-          className={`pb-3 transition-colors relative ${
-            activeTab === "officepc" ? "text-cyan-400 font-black" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          💻 Office PC Server & URL Setup
-          {activeTab === "officepc" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-t-full" />}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("architecture")}
-          className={`pb-3 transition-colors relative ${
-            activeTab === "architecture" ? "text-cyan-400 font-black" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          Database & System Infrastructure
-          {activeTab === "architecture" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-t-full" />}
         </button>
       </div>
 
@@ -777,7 +876,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                   <Building2 className="w-4 h-4 text-emerald-400" />
                   <span>Register & Create New Company Branch</span>
                 </h3>
-                <span className="text-[10px] text-slate-500 font-mono">REST API Synchronized</span>
+                <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1"><span>⚡</span> Cloud Synchronized</span>
               </div>
 
               {branchErrorMsg && (
@@ -867,6 +966,128 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* EDIT BRANCH MODAL POPUP */}
+          {editingBranch && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-slate-950 border border-cyan-500/50 rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-cyan-400" />
+                  <span>Edit Branch: {editingBranch.name} ({editingBranch.code})</span>
+                </h3>
+                <button
+                  onClick={() => setEditingBranch(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-900 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {branchErrorMsg && (
+                <div className="bg-red-950/80 border border-red-800 p-2.5 rounded-xl text-xs text-red-300 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{branchErrorMsg}</span>
+                </div>
+              )}
+
+              {branchSuccessMsg && (
+                <div className="bg-emerald-950/80 border border-emerald-800 p-2.5 rounded-xl text-xs text-emerald-300 font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{branchSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateBranch} className="space-y-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Branch Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={editBranchName}
+                      onChange={(e) => setEditBranchName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Branch Code</label>
+                    <input
+                      type="text"
+                      required
+                      value={editBranchCode}
+                      onChange={(e) => setEditBranchCode(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-cyan-300 font-extrabold focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Manager Name</label>
+                    <input
+                      type="text"
+                      value={editBranchManager}
+                      onChange={(e) => setEditBranchManager(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Branch Status</label>
+                    <select
+                      value={editBranchStatus}
+                      onChange={(e) => setEditBranchStatus(e.target.value as any)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-cyan-300 font-bold focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Physical Address</label>
+                    <input
+                      type="text"
+                      value={editBranchAddress}
+                      onChange={(e) => setEditBranchAddress(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Contact Phone</label>
+                    <input
+                      type="text"
+                      value={editBranchPhone}
+                      onChange={(e) => setEditBranchPhone(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => setEditingBranch(null)}
+                    className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingBranch}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isUpdatingBranch ? "Saving Changes..." : "Save Branch Updates"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
             </div>
           )}
 
@@ -991,6 +1212,186 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             </div>
           )}
 
+          {/* EDIT EMPLOYEE MODAL POPUP */}
+          {editingUser && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-slate-950 border border-cyan-500/50 rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-cyan-400" />
+                  <span>Edit Employee: {editingUser.name} ({editingUser.id})</span>
+                </h3>
+                <button
+                  onClick={() => setEditingUser(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-900 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {userErrorMsg && (
+                <div className="bg-red-950/80 border border-red-800 p-2.5 rounded-xl text-xs text-red-300 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{userErrorMsg}</span>
+                </div>
+              )}
+
+              {userSuccessMsg && (
+                <div className="bg-emerald-950/80 border border-emerald-800 p-2.5 rounded-xl text-xs text-emerald-300 font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{userSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateUser} className="space-y-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Staff Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={editUserName}
+                      onChange={(e) => setEditUserName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Official Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={editUserEmail}
+                      onChange={(e) => setEditUserEmail(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Mobile Phone</label>
+                    <input
+                      type="text"
+                      required
+                      value={editUserPhone}
+                      onChange={(e) => setEditUserPhone(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Assigned Branch</label>
+                    <select
+                      value={editUserBranch}
+                      onChange={(e) => setEditUserBranch(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-cyan-300 font-bold focus:outline-none focus:border-cyan-500"
+                    >
+                      {branchesList.map((b) => (
+                        <option key={b.id || b.name} value={b.name}>
+                          🏢 {b.name} Branch
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Assigned Role</label>
+                    <select
+                      value={editUserRole}
+                      onChange={(e) => setEditUserRole(e.target.value as any)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-cyan-300 font-bold focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="engineer">Valuation Field Engineer</option>
+                      <option value="drafter">Template Drafter</option>
+                      <option value="reviewer">Branch Senior Reviewer</option>
+                      <option value="admin">System Administrator</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">New Password (Optional)</label>
+                    <input
+                      type="password"
+                      value={editUserPassword}
+                      onChange={(e) => setEditUserPassword(e.target.value)}
+                      placeholder="Leave blank to keep current"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingUser}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isUpdatingUser ? "Saving Changes..." : "Save Employee Updates"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+            </div>
+          )}
+
+          {/* DELETE CONFIRMATION MODAL POPUP */}
+          {deleteConfirmTarget && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-slate-950 border border-red-500/50 rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl">
+                <div className="flex items-center gap-3 text-red-400">
+                  <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-800 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-wider">Confirm Deletion</h3>
+                    <p className="text-xs text-slate-400">This action cannot be undone.</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-300 bg-slate-900 border border-slate-800 p-3 rounded-xl leading-relaxed">
+                  Are you sure you want to delete <span className="font-bold text-white">"{deleteConfirmTarget.name}"</span>? All associated server data will be permanently removed.
+                </p>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmTarget(null)}
+                    className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const target = deleteConfirmTarget;
+                      setDeleteConfirmTarget(null);
+                      if (target.type === "branch") {
+                        await executeDeleteBranch(target.id, target.name);
+                      } else if (target.type === "user") {
+                        await executeDeleteUser(target.id, target.name);
+                      } else if (target.type === "institution") {
+                        await executeDeleteInstitution(target.id, target.name);
+                      }
+                    }}
+                    className="bg-red-600 hover:bg-red-500 text-white font-black px-4 py-2 rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Confirm Delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ORGANIZATIONAL HIERARCHY MATRIX (BRANCH -> EMPLOYEES -> ROLES) */}
           <div className="space-y-6 pt-2">
             {branchesList.map((branch) => {
@@ -1046,11 +1447,31 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                       </button>
 
                       <button
+                        onClick={() => {
+                          setEditingBranch(branch);
+                          setEditBranchName(branch.name);
+                          setEditBranchCode(branch.code);
+                          setEditBranchAddress(branch.address);
+                          setEditBranchPhone(branch.phone);
+                          setEditBranchManager(branch.manager);
+                          setEditBranchStatus(branch.status || "Active");
+                          setIsAddBranchOpen(false);
+                          setIsAddUserOpen(false);
+                        }}
+                        className="bg-slate-950 border border-slate-800 hover:border-cyan-500 text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
+                        title="Edit Branch"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
                         onClick={() => handleDeleteBranch(branch.id, branch.name)}
-                        className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-950/30 transition-all"
+                        className="bg-slate-950 border border-slate-800 hover:border-red-500 text-slate-400 hover:text-red-400 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
                         title="Delete Branch"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -1134,13 +1555,34 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                                 </div>
                               </div>
 
-                              <button
-                                onClick={() => handleDeleteUser(usr.id, usr.name)}
-                                className="text-slate-600 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-950/20 transition-all shrink-0"
-                                title="Remove Employee"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setEditingUser(usr);
+                                    setEditUserName(usr.name);
+                                    setEditUserEmail(usr.email);
+                                    setEditUserPhone(usr.phone || "");
+                                    setEditUserRole(usr.role || "engineer");
+                                    setEditUserBranch(usr.branch || branch.name);
+                                    setEditUserPassword("");
+                                    setIsAddUserOpen(false);
+                                    setEditingBranch(null);
+                                  }}
+                                  className="bg-slate-950 border border-slate-800 hover:border-cyan-500 text-slate-300 hover:text-cyan-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 text-[11px] font-bold shadow-sm"
+                                  title="Edit Employee"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(usr.id, usr.name)}
+                                  className="bg-slate-950 border border-slate-800 hover:border-red-500 text-slate-400 hover:text-red-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 text-[11px] font-bold shadow-sm"
+                                  title="Remove Employee"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -1150,137 +1592,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB: OFFICE PC SERVER & PUBLIC URL CONFIGURATION */}
-      {activeTab === "officepc" && (
-        <div className="space-y-5">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div>
-                <h2 className="text-sm font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
-                  <Building className="w-4 h-4 text-cyan-400" />
-                  Office PC On-Premise Host Server & Public Access URL
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Host all valuation records, images, bank templates, and backend logic locally on your office desktop PC with zero cloud cost.
-                </p>
-              </div>
-
-              <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-full">
-                ONLINE SERVER
-              </span>
-            </div>
-
-            {/* URL Addresses Card */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-                <p className="text-xs font-bold text-slate-300">1. Office Local LAN Access URL (Wifi / LAN)</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={officePcIp}
-                    onChange={(e) => setOfficePcIp(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-cyan-400 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(officePcIp)}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 font-bold"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Use this URL inside your office wifi network for Drafters and Reviewers.
-                </p>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-                <p className="text-xs font-bold text-slate-300">2. Remote Mobile Field URL (Free Cloudflare Tunnel)</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={publicTunnelUrl}
-                    onChange={(e) => setPublicTunnelUrl(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-emerald-400 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(publicTunnelUrl)}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 font-bold"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Share this HTTPS URL with Field Engineers on mobile devices to submit site visits from anywhere.
-                </p>
-              </div>
-            </div>
-
-            {copiedUrl && (
-              <p className="text-xs font-bold text-emerald-400 font-mono bg-emerald-950/60 p-2 rounded-xl text-center border border-emerald-800/40">
-                ✓ URL copied to clipboard! Share with your team or field engineers.
-              </p>
-            )}
-          </div>
-
-          {/* Step-By-Step Setup Guide */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-              Step-by-Step Instructions to Run on Your Office PC
-            </h3>
-
-            <div className="space-y-3 text-xs text-slate-300">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-start gap-3">
-                <span className="w-6 h-6 rounded-lg bg-cyan-500 text-slate-950 flex items-center justify-center font-black text-xs shrink-0">
-                  1
-                </span>
-                <div>
-                  <p className="font-bold text-slate-200">Install Node.js on your Office PC</p>
-                  <p className="text-slate-400 mt-0.5">
-                    Download & install free <strong className="text-slate-200">Node.js LTS (v20+)</strong> from <span className="font-mono text-cyan-400">nodejs.org</span> onto your Office Windows PC or Mac.
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-start gap-3">
-                <span className="w-6 h-6 rounded-lg bg-cyan-500 text-slate-950 flex items-center justify-center font-black text-xs shrink-0">
-                  2
-                </span>
-                <div>
-                  <p className="font-bold text-slate-200">Start the Server in One Command</p>
-                  <p className="text-slate-400 mt-0.5">
-                    Open Command Prompt / Terminal on your Office PC in the app directory and run:
-                  </p>
-                  <pre className="bg-slate-900 p-2 rounded-lg font-mono text-cyan-300 mt-1 border border-slate-800 text-[11px]">
-                    npm install && npm start
-                  </pre>
-                  <p className="text-slate-400 text-[10px] mt-1">
-                    This automatically boots Express backend server on port 3000 handling API data, attachments, and Excel/DOCX generation.
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-start gap-3">
-                <span className="w-6 h-6 rounded-lg bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-xs shrink-0">
-                  3
-                </span>
-                <div>
-                  <p className="font-bold text-slate-200">Generate Free HTTPS Public URL (Cloudflare Tunnel)</p>
-                  <p className="text-slate-400 mt-0.5">
-                    To access the app from mobile field engineers anywhere outside office without paying for static IP:
-                  </p>
-                  <pre className="bg-slate-900 p-2 rounded-lg font-mono text-emerald-300 mt-1 border border-slate-800 text-[11px]">
-                    npx cloudflared tunnel --url http://localhost:3000
-                  </pre>
-                  <p className="text-slate-400 text-[10px] mt-1">
-                    It gives you a free secure HTTPS URL (e.g. <span className="font-mono text-emerald-400">https://your-office.trycloudflare.com</span>) that field engineers can open on their mobile phones!
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -1300,12 +1611,13 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                     Bank / Financial Institution Onboarding Portal
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Administrator API endpoint (<span className="font-mono text-cyan-300">/api/institutions</span>) for bank onboarding & format meta document (.docx / .xlsx) upload
+                    Central Administrative Portal for bank empanelment & format meta document (.docx / .xlsx) upload
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-full">
-                API Endpoint Live
+              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                System Network Active
               </span>
             </div>
 
@@ -1469,7 +1781,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                   className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4" />
-                  {isSubmittingInst ? "Onboarding Institution..." : "Onboard Bank / Institution via API"}
+                  {isSubmittingInst ? "Onboarding Institution..." : "Onboard Bank / Financial Institution"}
                 </button>
               </div>
             </form>
@@ -1484,7 +1796,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                   Directory of Onboarded Financial Institutions ({institutions.length})
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Live response returned by <span className="font-mono text-cyan-300">GET /api/institutions</span>
+                  Verified Central Directory & Bank Empanelment Records
                 </p>
               </div>
               <button
@@ -1713,42 +2025,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* TAB 4: DATABASE & SYSTEM INFRASTRUCTURE */}
-      {activeTab === "architecture" && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <h2 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-            <Database className="w-4 h-4 text-cyan-400" />
-            Central Valuation Database & Infrastructure
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-              <h3 className="font-extrabold text-cyan-300 text-sm">1. Valuation Data Management</h3>
-              <p className="text-slate-400 leading-relaxed">
-                Centralized storage for all valuation cases, property boundaries, market rates, and inspector assignments.
-              </p>
-              <ul className="list-disc list-inside text-slate-400 space-y-1 pt-1">
-                <li>Stores complete inspection logs and geotagged photographs</li>
-                <li>Branch-wise isolation for multi-region security</li>
-                <li>Automatic offline synchronization for field inspectors</li>
-              </ul>
-            </div>
-
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-              <h3 className="font-extrabold text-emerald-300 text-sm">2. Bank Report Generation Engine</h3>
-              <p className="text-slate-400 leading-relaxed">
-                Automated document compilation engine for custom Word and Excel bank templates.
-              </p>
-              <ul className="list-disc list-inside text-slate-400 space-y-1 pt-1">
-                <li>Automatic Row X Column matrix photo tagging per bank requirement</li>
-                <li>Dynamic table insertion for floor accommodations & boundary measurements</li>
-                <li>Instant PDF/Excel/Word export capabilities</li>
-              </ul>
-            </div>
-          </div>
         </div>
       )}
     </div>
