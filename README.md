@@ -7,13 +7,14 @@ A production-grade, full-stack valuation workstation and mobile site inspection 
 ## 📑 Table of Contents
 1. [Architecture Overview](#-architecture-overview)
 2. [Quick Start (Local PC Development)](#-quick-start-local-pc-development)
-3. [Database Setup (Open-Source MongoDB)](#-database-setup-open-source-mongodb)
-4. [Public Remote Tunneling (Free Cloudflare / Localtunnel)](#-public-remote-tunneling-free-cloudflare--localtunnel)
-5. [Building the Native Android APK (Capacitor)](#-building-the-native-android-apk-capacitor)
-6. [Building the Native iOS App (Xcode)](#-building-the-native-ios-app-xcode)
-7. [Default Role Accounts & Credentials](#-default-role-accounts--credentials)
-8. [Production Deployment & VPS Sizing (1 Lakh Cases/Month)](#-production-deployment--vps-sizing-1-lakh-casesmonth)
-9. [Full Whitepaper & Business Architecture Guide](./docs/ARCHITECTURE_AND_BUSINESS_GUIDE.md)
+3. [Database & High-Volume Image Storage Setup](#-database--high-volume-image-storage-setup)
+4. [Running Locally via Docker & Docker Compose (1-Click Stack)](#-running-locally-via-docker--docker-compose-1-click-stack)
+5. [Public Remote Tunneling (Free Cloudflare / Localtunnel)](#-public-remote-tunneling-free-cloudflare--localtunnel)
+6. [Building the Native Android APK (Capacitor)](#-building-the-native-android-apk-capacitor)
+7. [Building the Native iOS App (Xcode)](#-building-the-native-ios-app-xcode)
+8. [Default Role Accounts & Credentials](#-default-role-accounts--credentials)
+9. [Production Deployment & VPS Sizing (1 Lakh Cases/Month)](#-production-deployment--vps-sizing-1-lakh-casesmonth)
+10. [Full Whitepaper & Business Architecture Guide](./docs/ARCHITECTURE_AND_BUSINESS_GUIDE.md)
 
 ---
 
@@ -71,20 +72,24 @@ STORAGE_DRIVER=local
 
 ---
 
-## 🗄️ Database Setup (Open-Source MongoDB)
+## 🗄️ Database & High-Volume Image Storage Setup
 
-The application includes an **intelligent auto-fallback adapter**:
+The application features a decoupled architecture separating high-speed metadata from heavy media attachments:
+
+### 1. MongoDB Setup (Metadata & Case State)
+The system includes an **intelligent auto-fallback adapter**:
 - **Without MongoDB**: Runs seamlessly using persistent filesystem JSON stores and in-memory caches.
 - **With MongoDB**: Automatically activates connection pooling (`minPoolSize: 10`, `maxPoolSize: 50`), compound indexes, and full-text search.
+- **Local Connection**: `MONGODB_URI=mongodb://localhost:27017/evalo_valuation`
+- **Cloud Cluster**: `MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/evalo_valuation`
 
-### Option A: Local MongoDB Community Server (Free)
-1. Download and install [MongoDB Community Server](https://www.mongodb.com/try/download/community).
-2. Start the MongoDB service.
-3. Set `MONGODB_URI=mongodb://localhost:27017/evalo_valuation` in your `.env`.
-
-### Option B: Free Cloud Cluster (MongoDB Atlas)
-1. Create a free M0 cluster at [MongoDB Atlas](https://www.mongodb.com/atlas).
-2. Copy your connection string and set `MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/evalo_valuation` in `.env`.
+### 2. MinIO / S3 Object Storage Setup (High-Volume Inspection Photos)
+To handle 15+ Lakh monthly field photos without bloating the database:
+- **Driver**: Set `STORAGE_DRIVER=s3` in `.env`
+- **Endpoint**: `S3_ENDPOINT=http://localhost:9000` (or AWS S3 / Cloudflare R2 endpoint)
+- **Bucket**: `S3_BUCKET_NAME=valuation-photos`
+- **Access & Secret Keys**: `S3_ACCESS_KEY=minioadmin` / `S3_SECRET_KEY=minioadmin`
+- The system uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for direct, high-throughput client and server uploads.
 
 ---
 
@@ -176,9 +181,9 @@ The platform includes pre-configured demo credentials with role-based access:
 
 ---
 
-## 🐳 Running Locally via Docker & Docker Compose
+## 🐳 Running Locally via Docker & Docker Compose (1-Click Stack)
 
-If you have Docker and Docker Compose installed on your PC, you can spin up the entire application along with **MongoDB (Database)** and **MinIO (S3 Object Storage for 15+ Lakh monthly images)** using a single command—no manual setup required!
+If you have Docker and Docker Compose installed on your PC, you can spin up the entire application along with **MongoDB 7.0 (Database)** and **MinIO (S3 Object Storage for 15+ Lakh monthly images)** using a single command—no manual dependency or database installation required!
 
 ### 1. Prerequisites
 - **Docker Desktop** installed and running on Windows, macOS, or Linux.
@@ -190,15 +195,17 @@ Open your terminal in the root project folder and run:
 docker compose up --build -d
 ```
 
-This will automatically start:
-1. **Valuation Studio App Container** at **`http://localhost:3000`**.
-2. **MongoDB 7.0 Database Container** for cases, users, and metadata (`port 27017`).
-3. **MinIO Object Storage Container** for high-volume GPS inspection photos & satellite captures (`port 9000` API, `port 9001` Management Console).
+This will automatically launch three coordinated services:
+1. **Valuation Studio App**: Accessible at **`http://localhost:3000`**.
+2. **MongoDB 7.0 Database**: Internal container communication with persistent volume storage (`port 27017`).
+3. **MinIO S3 Object Storage API**: Dedicated image upload service (`port 9000`).
+4. **MinIO Web Console**: Storage explorer at **`http://localhost:9001`** (Login: `minioadmin` / `minioadmin`).
 
 ### 3. Management Commands
-- **View logs**: `docker compose logs -f`
+- **View live streaming logs**: `docker compose logs -f`
 - **Stop containers**: `docker compose stop`
-- **Tear down completely**: `docker compose down`
+- **Restart containers**: `docker compose restart`
+- **Tear down completely (preserving data volumes)**: `docker compose down`
 
 ---
 
