@@ -1,0 +1,58 @@
+version: '3.8'
+
+# 🚀 PRODUCTION ENVIRONMENT (Port 3000)
+# High-concurrency production stack for live bank valuation cases.
+
+services:
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: valuation_studio_prod_app
+    ports:
+      - "3000:3000" # Production on Port 3000
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongo-prod:27017/evalo_valuation_prod
+      - MONGODB_DB_NAME=evalo_valuation_prod
+      - JWT_SECRET=evalo_production_jwt_secret_2026
+      - STORAGE_DRIVER=s3
+      - S3_ENDPOINT=http://minio-prod:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET_NAME=valuation-photos-prod
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+    volumes:
+      - ./uploads_prod:/app/uploads
+    depends_on:
+      - mongo-prod
+      - minio-prod
+    restart: always
+
+  mongo-prod:
+    image: mongo:7.0
+    container_name: valuation_studio_prod_mongo
+    ports:
+      - "27017:27017" # Production Mongo on Port 27017
+    volumes:
+      - mongo_prod_data:/data/db
+    restart: always
+
+  minio-prod:
+    image: minio/minio:latest
+    container_name: valuation_studio_prod_minio
+    ports:
+      - "9000:9000" # Prod MinIO API on Port 9000
+      - "9001:9001" # Prod MinIO Console on Port 9001
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_prod_data:/data
+    command: server /data --console-address ":9001"
+    restart: always
+
+volumes:
+  mongo_prod_data:
+  minio_prod_data:

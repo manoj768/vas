@@ -1,0 +1,58 @@
+version: '3.8'
+
+# 🧪 DEV / TESTING ENVIRONMENT (Port 3001)
+# Use this environment for active feature testing, QA validation, and dummy data.
+
+services:
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: valuation_studio_dev_app
+    ports:
+      - "3001:3000" # Dev runs on Port 3001
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo-dev:27017/evalo_valuation_dev
+      - MONGODB_DB_NAME=evalo_valuation_dev
+      - JWT_SECRET=dev_secret_evalo_qa_testing_2026
+      - STORAGE_DRIVER=s3
+      - S3_ENDPOINT=http://minio-dev:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET_NAME=valuation-photos-dev
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+    volumes:
+      - ./uploads_dev:/app/uploads
+    depends_on:
+      - mongo-dev
+      - minio-dev
+    restart: always
+
+  mongo-dev:
+    image: mongo:7.0
+    container_name: valuation_studio_dev_mongo
+    ports:
+      - "27018:27017" # Dev Mongo on Port 27018
+    volumes:
+      - mongo_dev_data:/data/db
+    restart: always
+
+  minio-dev:
+    image: minio/minio:latest
+    container_name: valuation_studio_dev_minio
+    ports:
+      - "9010:9000" # Dev MinIO API on Port 9010
+      - "9011:9001" # Dev MinIO Console on Port 9011
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_dev_data:/data
+    command: server /data --console-address ":9001"
+    restart: always
+
+volumes:
+  mongo_dev_data:
+  minio_dev_data:

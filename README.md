@@ -222,6 +222,56 @@ This will automatically launch three coordinated services:
 
 ---
 
+## 🔀 Git Branching Strategy & Dev-to-Prod Pipeline
+
+To ensure that newly written features, inspection fields, and updates are thoroughly tested before going live to field engineers and bank portals, follow this industry-standard **Dev $\rightarrow$ Testing $\rightarrow$ Main/Prod** workflow:
+
+```
+[ Feature Branches ] ---> Merge into [ dev ] ---> QA / Field Testing (Port 3001) ---> Merge into [ main ] ---> Live Production (Port 3000)
+```
+
+### 1. The Environment Separation
+| Parameter | `dev` Branch (Testing) | `main` Branch (Production) |
+| :--- | :--- | :--- |
+| **Docker Compose Config** | `docker-compose.dev.yml` | `docker-compose.prod.yml` |
+| **App Port** | `http://localhost:3001` | `http://localhost:3000` |
+| **Database** | Sandbox `evalo_valuation_dev` (:27018) | Live `evalo_valuation_prod` (:27017) |
+| **Image Bucket** | `valuation-photos-dev` | `valuation-photos-prod` |
+| **Purpose** | Internal QA, field testing, test bank files | Real client & live banking operations |
+
+### 2. Automated 1-Command Deployment Script
+A helper script `./deploy.sh` is provided in the repository to automate branch checkout, pulling latest Git commits, and zero-downtime container redeployment:
+
+```bash
+# 🧪 Deploy & test latest Dev branch changes:
+chmod +x deploy.sh
+./deploy.sh dev
+
+# 🚀 Once tested and approved, deploy to live Production:
+./deploy.sh prod
+```
+
+### 3. Standard Git Release Flow
+```bash
+# Step 1: Work on your feature or bugfix
+git checkout dev
+git pull origin dev
+# ... make your code changes ...
+git commit -am "feat: added new bank format and photo category"
+git push origin dev
+
+# Step 2: Test on the Dev container (Port 3001)
+./deploy.sh dev
+
+# Step 3: Once QA passes, merge into main and release to Production (Port 3000)
+git checkout main
+git merge dev
+git push origin main
+./deploy.sh prod
+```
+
+---
+
 ## 🚀 Production Deployment & VPS Sizing (1 Lakh Cases/Month)
 
 ### Hardware Sizing for 1 Lakh Cases / Month:
