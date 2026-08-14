@@ -22,6 +22,21 @@ export const getDeviceInfo = (): DeviceInfo => {
 };
 
 /**
+ * Returns the active Backend API base URL.
+ * When running in native Android/iOS WebView with local bundles, it routes to this URL.
+ */
+export const getApiBaseUrl = (): string => {
+  // Check if client-side VITE_API_URL is configured
+  const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env;
+  if (metaEnv && metaEnv.VITE_API_URL) {
+    return metaEnv.VITE_API_URL;
+  }
+  
+  // Default to relative /api when hosted as a web app
+  return "";
+};
+
+/**
  * High-accuracy GPS geolocation provider with graceful fallback
  * Works seamlessly in both Native Android (Capacitor) and Mobile/Desktop Browsers
  */

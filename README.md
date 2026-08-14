@@ -119,7 +119,14 @@ Convert the web app into a native Android APK with direct access to hardware GPS
 - **Android Studio**: [Download Android Studio](https://developer.android.com/studio)
 - **Java JDK 17+**
 
-### 2. Generate Android Project & Build APK
+### 2. Configure Backend URL Placeholder (1 Quick Edit)
+Open `capacitor.config.ts` and replace the placeholder URL with your live tunnel or backend URL:
+```typescript
+// Replace this dummy placeholder in capacitor.config.ts:
+const BACKEND_PLACEHOLDER_URL = "https://your-tunnel-name.trycloudflare.com"; // OR "http://192.168.1.100:3000"
+```
+
+### 3. Generate Android Project & Build APK
 ```bash
 # 1. Add the Android platform (run once)
 npx cap add android
@@ -127,14 +134,14 @@ npx cap add android
 # 2. Build the production React bundle
 npm run build
 
-# 3. Sync web assets with native Android project
+# 3. Sync web assets & URL configuration with native Android project
 npx cap sync
 
 # 4. Open in Android Studio
 npm run cap:android
 ```
 
-### 3. Inside Android Studio
+### 4. Inside Android Studio
 1. Wait for the Gradle project sync to finish.
 2. In the top menu, click **Build $\rightarrow$ Build Bundle(s) / APK(s) $\rightarrow$ Build APK(s)**.
 3. Locate the generated `.apk` in `android/app/build/outputs/apk/debug/app-debug.apk`.
@@ -148,7 +155,13 @@ npm run cap:android
 - **macOS** with **Xcode 15+** installed.
 - **Cocoapods**: `brew install cocoapods` or `sudo gem install cocoapods`.
 
-### 2. Build & Launch in Xcode
+### 2. Configure Backend URL Placeholder
+Make sure `capacitor.config.ts` has your live backend or tunnel URL:
+```typescript
+const BACKEND_PLACEHOLDER_URL = "https://your-tunnel-name.trycloudflare.com";
+```
+
+### 3. Build & Launch in Xcode
 ```bash
 # 1. Add the iOS platform (run once)
 npx cap add ios
