@@ -122,21 +122,53 @@ export const PropertyLocationSatelliteCapture: React.FC<PropertyLocationSatellit
     onLocationChange(lat, value);
   };
 
-  // Pointer drag events for smooth pan on mobile touch & desktop mouse
+  // Active pointers & pinch zoom state
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const initialPinchDistRef = useRef<number | null>(null);
+
+  // Pointer drag and pinch zoom events for mobile touch & desktop mouse
   const handlePointerDown = (e: React.PointerEvent) => {
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } catch {}
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      startLat: parseFloat(lat) || 28.6139,
-      startLon: parseFloat(lon) || 77.2090,
-    };
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 2) {
+      const pointers = Array.from(activePointersRef.current.values()) as { x: number; y: number }[];
+      const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+      initialPinchDistRef.current = dist;
+    } else if (activePointersRef.current.size === 1) {
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        startLat: parseFloat(lat) || 28.6139,
+        startLon: parseFloat(lon) || 77.2090,
+      };
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // Handle Pinch Zoom if 2 pointers active
+    if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null) {
+      const pointers = Array.from(activePointersRef.current.values()) as { x: number; y: number }[];
+      const currentDist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+      const ratio = currentDist / initialPinchDistRef.current;
+
+      if (ratio > 1.22) {
+        setZoom((z) => Math.min(z + 1, 19));
+        initialPinchDistRef.current = currentDist;
+      } else if (ratio < 0.82) {
+        setZoom((z) => Math.max(z - 1, 12));
+        initialPinchDistRef.current = currentDist;
+      }
+      return;
+    }
+
     if (!isDragging || !dragStartRef.current) return;
 
     const dx = e.clientX - dragStartRef.current.x;
@@ -161,12 +193,26 @@ export const PropertyLocationSatelliteCapture: React.FC<PropertyLocationSatellit
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!isDragging) return;
     try {
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {}
-    setIsDragging(false);
-    dragStartRef.current = null;
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      initialPinchDistRef.current = null;
+    }
+    if (activePointersRef.current.size === 0) {
+      setIsDragging(false);
+      dragStartRef.current = null;
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      setZoom((z) => Math.min(z + 1, 19));
+    } else {
+      setZoom((z) => Math.max(z - 1, 12));
+    }
   };
 
   // Convert Lat/Lon & Zoom to Tile Coordinates
@@ -459,6 +505,7 @@ export const PropertyLocationSatelliteCapture: React.FC<PropertyLocationSatellit
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onWheel={handleWheel}
         >
           {/* Tile Layer */}
           {visibleTiles.map((tile) => (

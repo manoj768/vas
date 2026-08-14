@@ -1743,7 +1743,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                     Choose .docx / .xlsx File
                     <input
                       type="file"
-                      accept=".docx,.xlsx,.doc,.xls,.pdf"
+                      accept=".docx,.xlsx,.doc,.xls,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf"
                       onChange={handleMetaFileChange}
                       className="hidden"
                     />

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -22,7 +22,7 @@ import {
   AlertCircle,
   FileCheck
 } from "lucide-react";
-import { ValuationCase } from "../types";
+import { ValuationCase, OnboardedInstitution } from "../types";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import ExcelJS from "exceljs";
@@ -128,7 +128,53 @@ export const BankReportGeneratorStudio: React.FC<BankReportGeneratorStudioProps>
   const [selectedCase, setSelectedCase] = useState<ValuationCase | null>(
     currentCase || cases[0] || null
   );
+  const [onboardedInstitutions, setOnboardedInstitutions] = useState<OnboardedInstitution[]>([]);
+
+  useEffect(() => {
+    fetch("/api/institutions")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.institutions)) {
+          setOnboardedInstitutions(data.institutions);
+        }
+      })
+      .catch((err) => console.error("Error fetching institutions for report studio:", err));
+  }, []);
+
+  const combinedBankFormats = useMemo(() => {
+    const list = [...BANK_FORMATS];
+    onboardedInstitutions.forEach((inst) => {
+      const exists = list.some((f) => f.bankName.toLowerCase() === inst.name.toLowerCase());
+      if (!exists) {
+        list.push({
+          id: `inst-${inst.id}`,
+          bankName: inst.name,
+          docxTemplateName: inst.metaDocument?.originalName || `${inst.code || "Inst"}_Valuation_Format.docx`,
+          excelTemplateName: `${inst.code || "Inst"}_Valuation_Sheet.xlsx`,
+          defaultMatrix: "3x3",
+          requiredFields: ["Borrower Name", "Property Address", "Land Area", "Market Value"],
+          bankLogoText: inst.name.toUpperCase(),
+          primaryColor: "bg-blue-700"
+        });
+      }
+    });
+    return list;
+  }, [onboardedInstitutions]);
+
   const [selectedBankFormat, setSelectedBankFormat] = useState<BankTemplateFormat>(BANK_FORMATS[0]);
+
+  useEffect(() => {
+    if (selectedCase?.institution && combinedBankFormats.length > 0) {
+      const match = combinedBankFormats.find(
+        (f) => f.bankName.toLowerCase() === selectedCase.institution.toLowerCase() ||
+               f.bankName.toLowerCase().includes(selectedCase.institution.toLowerCase()) ||
+               selectedCase.institution.toLowerCase().includes(f.bankName.toLowerCase())
+      );
+      if (match) {
+        setSelectedBankFormat(match);
+      }
+    }
+  }, [selectedCase, combinedBankFormats]);
   const [matrixType, setMatrixType] = useState<GridMatrixType>("3x3");
   const [activeTab, setActiveTab] = useState<"fill_data" | "photo_matrix" | "template_upload" | "preview_export">("fill_data");
 
@@ -493,12 +539,12 @@ export const BankReportGeneratorStudio: React.FC<BankReportGeneratorStudioProps>
             <select
               value={selectedBankFormat.id}
               onChange={(e) => {
-                const b = BANK_FORMATS.find((f) => f.id === e.target.value);
+                const b = combinedBankFormats.find((f) => f.id === e.target.value);
                 if (b) handleBankChange(b);
               }}
               className="bg-slate-900 border border-slate-800 text-emerald-300 text-xs font-black rounded-xl px-3 py-1.5 focus:outline-none focus:border-cyan-500"
             >
-              {BANK_FORMATS.map((b) => (
+              {combinedBankFormats.map((b) => (
                 <option key={b.id} value={b.id}>
                   🏛️ {b.bankName}
                 </option>
@@ -831,7 +877,7 @@ export const BankReportGeneratorStudio: React.FC<BankReportGeneratorStudioProps>
                 </p>
                 <label className="inline-block bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all">
                   <span>Browse .docx File</span>
-                  <input type="file" accept=".docx" onChange={handleDocxUpload} className="hidden" />
+                  <input type="file" accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" onChange={handleDocxUpload} className="hidden" />
                 </label>
               </div>
 
@@ -844,7 +890,7 @@ export const BankReportGeneratorStudio: React.FC<BankReportGeneratorStudioProps>
                 </p>
                 <label className="inline-block bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all">
                   <span>Browse .xlsx File</span>
-                  <input type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && setUploadedExcel(e.target.files[0])} className="hidden" />
+                  <input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(e) => e.target.files?.[0] && setUploadedExcel(e.target.files[0])} className="hidden" />
                 </label>
               </div>
             </div>

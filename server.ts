@@ -6,12 +6,40 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { connectToDatabase, getDbHealth, isDbConnected } from "./src/server/db/connection";
+import { CaseModel } from "./src/server/db/models/Case";
+import { UserModel } from "./src/server/db/models/User";
+import { InstitutionModel } from "./src/server/db/models/Institution";
+import { BranchModel } from "./src/server/db/models/Branch";
+import { PhotoAttachmentModel } from "./src/server/db/models/PhotoAttachment";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "drr_valuation_open_source_secret_key_2026";
+
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Ensure uploads base folders exist
+const uploadsBaseDir = path.join(process.cwd(), "uploads", "sites");
+if (!fs.existsSync(uploadsBaseDir)) {
+  fs.mkdirSync(uploadsBaseDir, { recursive: true });
+}
+
+const uploadsInstDir = path.join(process.cwd(), "uploads", "institutions");
+if (!fs.existsSync(uploadsInstDir)) {
+  fs.mkdirSync(uploadsInstDir, { recursive: true });
+}
+
+// Serve uploaded media files static folder
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// Persistent JSON Storage Paths
+const instDataFilePath = path.join(process.cwd(), "uploads", "institutions.json");
+const branchesDataFilePath = path.join(process.cwd(), "uploads", "branches.json");
+const usersDataFilePath = path.join(process.cwd(), "uploads", "users.json");
 
 // Open Source Credential Store with Pre-hashed Passwords (bcrypt)
 interface RegisteredUser {
@@ -176,28 +204,6 @@ function saveUsers(data: any) {
 }
 
 let registeredUsers: RegisteredUser[] = loadUsers();
-
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-// Ensure uploads base folder exists
-const uploadsBaseDir = path.join(process.cwd(), "uploads", "sites");
-if (!fs.existsSync(uploadsBaseDir)) {
-  fs.mkdirSync(uploadsBaseDir, { recursive: true });
-}
-
-const uploadsInstDir = path.join(process.cwd(), "uploads", "institutions");
-if (!fs.existsSync(uploadsInstDir)) {
-  fs.mkdirSync(uploadsInstDir, { recursive: true });
-}
-
-// Serve uploaded media files static folder
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
-// Persistent JSON Storage Helpers
-const instDataFilePath = path.join(process.cwd(), "uploads", "institutions.json");
-const branchesDataFilePath = path.join(process.cwd(), "uploads", "branches.json");
-const usersDataFilePath = path.join(process.cwd(), "uploads", "users.json");
 
 const defaultInstitutions = [
   {
@@ -538,6 +544,27 @@ function getGenAIClient(): GoogleGenAI {
   }
   return aiClient;
 }
+
+// SYSTEM & DATABASE STATUS API ROUTE (Open Source MongoDB / Storage Health)
+app.get("/api/system/db-status", async (req, res) => {
+  try {
+    const health = await getDbHealth();
+    return res.json({
+      success: true,
+      health,
+      storageDriver: process.env.STORAGE_DRIVER || "local",
+      maxCapacityTarget: "1,00,000 cases/month (1.2M annual)",
+      recommendedHardware: "8 vCPU / 16GB RAM / NVMe SSD",
+      indexesConfigured: [
+        "Case: { branch: 1, status: 1, createdAt: -1 }",
+        "Case: { customerName: 'text', institution: 'text', address: 'text' }",
+        "PhotoAttachment: { caseId: 1, category: 1, createdAt: -1 }",
+      ],
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to get database status" });
+  }
+});
 
 // AUTHENTICATION API ROUTES (Open Source Credential Auth)
 app.post("/api/auth/login", (req, res) => {
@@ -1242,6 +1269,47 @@ Provide a structured AI Valuation Risk Assessment in JSON format containing:
   }
 });
 
+// Gemini AI Route 3: Generate Automated Remarks & Summary based on site data & documents
+app.post("/api/gemini/generate-remarks", async (req, res) => {
+  try {
+    const { siteFormat } = req.body;
+    if (!siteFormat) {
+      return res.status(400).json({ success: false, message: "siteFormat data required" });
+    }
+
+    const ai = getGenAIClient();
+    const promptText = `
+You are a Senior Property Valuation Chief Technical Officer at Evalo.
+Based on the following site visit inspection data, measurements, boundaries, and property details:
+${JSON.stringify(siteFormat, null, 2)}
+
+Generate professional bank-grade valuation inspection remarks in JSON format with the following exact fields:
+- remarksWithDeviation: string (Detailed professional appraisal remarks covering plan compliance, boundary verification, and any structural deviation observed)
+- measurementNotes: string (Verification of site dimensions vs title deed measurements)
+- floorFlatLayoutNotes: string (Boundary orientation and flat/floor layout verification)
+- elevationPlanNotes: string (Elevation, finishing, and construction quality observations)
+- routeMapNotes: string (Approach road width, accessibility, and prominent neighborhood landmarks)
+- negativeRemarksNotes: string (Any adverse surroundings, high-tension wire, narrow approach, or dampness observations)
+- overallStatus: "Positive" | "Negative" | "Cannot decide"
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: promptText,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const parsedData = JSON.parse(response.text || "{}");
+    return res.json({ success: true, remarks: parsedData });
+  } catch (error: any) {
+    console.error("Gemini generate-remarks error:", error);
+    return res.status(500).json({ success: false, message: error?.message || "Failed to generate remarks with AI" });
+  }
+});
+
+
 // Backend Route 3: Inject case data into Bank-Specific Excel / Formats with Photo Attachments
 app.post("/api/export/bank-format", async (req, res) => {
   try {
@@ -1358,6 +1426,11 @@ app.get("/api/export/download/:caseId", (req, res) => {
 });
 
 async function startServer() {
+  // Initialize Database Connection (MongoDB Community or Local Fallback)
+  await connectToDatabase().catch((err) => {
+    console.warn("[Database] MongoDB lazy startup notice:", err.message);
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

@@ -77,20 +77,50 @@ export const CaseDashboard: React.FC<CaseDashboardProps> = ({
     return () => ro.disconnect();
   }, [activeTab]);
 
+  const dashboardMapPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const dashboardInitialPinchDistRef = useRef<number | null>(null);
+
   const handleMapPointerDown = (e: React.PointerEvent) => {
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } catch {}
-    setIsMapDragging(true);
-    mapDragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      startLat: mapCenterLat,
-      startLon: mapCenterLon,
-    };
+    dashboardMapPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (dashboardMapPointersRef.current.size === 2) {
+      const pointers = Array.from(dashboardMapPointersRef.current.values()) as { x: number; y: number }[];
+      const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+      dashboardInitialPinchDistRef.current = dist;
+    } else if (dashboardMapPointersRef.current.size === 1) {
+      setIsMapDragging(true);
+      mapDragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        startLat: mapCenterLat,
+        startLon: mapCenterLon,
+      };
+    }
   };
 
   const handleMapPointerMove = (e: React.PointerEvent) => {
+    if (dashboardMapPointersRef.current.has(e.pointerId)) {
+      dashboardMapPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (dashboardMapPointersRef.current.size === 2 && dashboardInitialPinchDistRef.current !== null) {
+      const pointers = Array.from(dashboardMapPointersRef.current.values()) as { x: number; y: number }[];
+      const currentDist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+      const ratio = currentDist / dashboardInitialPinchDistRef.current;
+
+      if (ratio > 1.22) {
+        setMapZoom((z) => Math.min(z + 1, 18));
+        dashboardInitialPinchDistRef.current = currentDist;
+      } else if (ratio < 0.82) {
+        setMapZoom((z) => Math.max(z - 1, 6));
+        dashboardInitialPinchDistRef.current = currentDist;
+      }
+      return;
+    }
+
     if (!isMapDragging || !mapDragStartRef.current) return;
     const dx = e.clientX - mapDragStartRef.current.x;
     const dy = e.clientY - mapDragStartRef.current.y;
@@ -112,12 +142,26 @@ export const CaseDashboard: React.FC<CaseDashboardProps> = ({
   };
 
   const handleMapPointerUp = (e: React.PointerEvent) => {
-    if (!isMapDragging) return;
     try {
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {}
-    setIsMapDragging(false);
-    mapDragStartRef.current = null;
+    dashboardMapPointersRef.current.delete(e.pointerId);
+    if (dashboardMapPointersRef.current.size < 2) {
+      dashboardInitialPinchDistRef.current = null;
+    }
+    if (dashboardMapPointersRef.current.size === 0) {
+      setIsMapDragging(false);
+      mapDragStartRef.current = null;
+    }
+  };
+
+  const handleMapWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      setMapZoom((z) => Math.min(z + 1, 18));
+    } else {
+      setMapZoom((z) => Math.max(z - 1, 6));
+    }
   };
 
   const recenterMap = () => {
@@ -526,6 +570,7 @@ export const CaseDashboard: React.FC<CaseDashboardProps> = ({
                   onPointerMove={handleMapPointerMove}
                   onPointerUp={handleMapPointerUp}
                   onPointerCancel={handleMapPointerUp}
+                  onWheel={handleMapWheel}
                 >
                   {dashboardVisibleTiles.map((tile) => (
                     <img

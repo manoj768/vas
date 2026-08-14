@@ -77,6 +77,43 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
   onOpenAIAssistant,
 }) => {
   const [activeTab, setActiveTab] = useState<string>("sec1");
+  const [isGeneratingRemarks, setIsGeneratingRemarks] = useState<boolean>(false);
+
+  const handleGenerateGeminiRemarks = async () => {
+    try {
+      setIsGeneratingRemarks(true);
+      const res = await fetch("/api/gemini/generate-remarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteFormat }),
+      });
+      const data = await res.json();
+      if (data.success && data.remarks) {
+        setSiteFormat({
+          ...siteFormat,
+          finalRemarksSubmissions: {
+            ...siteFormat.finalRemarksSubmissions,
+            remarksWithDeviation: data.remarks.remarksWithDeviation || siteFormat.finalRemarksSubmissions.remarksWithDeviation,
+            measurementNotes: data.remarks.measurementNotes || siteFormat.finalRemarksSubmissions.measurementNotes,
+            floorFlatLayoutNotes: data.remarks.floorFlatLayoutNotes || siteFormat.finalRemarksSubmissions.floorFlatLayoutNotes,
+            elevationPlanNotes: data.remarks.elevationPlanNotes || siteFormat.finalRemarksSubmissions.elevationPlanNotes,
+            routeMapNotes: data.remarks.routeMapNotes || siteFormat.finalRemarksSubmissions.routeMapNotes,
+            overallStatus: data.remarks.overallStatus || siteFormat.finalRemarksSubmissions.overallStatus,
+          },
+          neighborhoodSurroundings: {
+            ...siteFormat.neighborhoodSurroundings,
+            negativeRemarksNotes: data.remarks.negativeRemarksNotes || siteFormat.neighborhoodSurroundings.negativeRemarksNotes,
+          }
+        });
+      } else {
+        alert("Failed to generate AI remarks: " + (data.message || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error calling Gemini remarks generator: " + err.message);
+    } finally {
+      setIsGeneratingRemarks(false);
+    }
+  };
 
   // Initializing 10-Section Form State
   const initialFormat: FullSiteVisitFormat = caseItem.siteVisitFormat || {
@@ -532,18 +569,18 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Client Name (Borrower)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400 font-semibold">Client Name (Borrower)</label>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    Initiated from Site Creation
+                  </span>
+                </div>
                 <input
                   type="text"
-                  placeholder="Client / Borrower Name"
+                  readOnly
                   value={siteFormat.generalInfo.clientName}
-                  onChange={(e) =>
-                    setSiteFormat({
-                      ...siteFormat,
-                      generalInfo: { ...siteFormat.generalInfo, clientName: e.target.value },
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none"
                 />
               </div>
 
@@ -552,18 +589,15 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
                   <label className="block text-slate-400 font-semibold">Bank / Institution Name</label>
                   <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
                     <Lock className="w-3 h-3 text-amber-400" />
-                    Central DB Locked
+                    Initiated from Site Creation
                   </span>
                 </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    readOnly
-                    value={caseItem.institution || siteFormat.generalInfo.bankName || "Empanelled Bank"}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none pr-9"
-                  />
-                  <Lock className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
-                </div>
+                <input
+                  type="text"
+                  readOnly
+                  value={siteFormat.generalInfo.bankName}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none"
+                />
               </div>
 
               <div>
@@ -598,23 +632,20 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">
-                  Property Address (As per Site Visit)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400 font-semibold">
+                    Property Address (As per Site Creation)
+                  </label>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    Initiated from Site Creation
+                  </span>
+                </div>
                 <textarea
                   rows={2}
-                  placeholder="Full physical address of inspected property"
+                  readOnly
                   value={siteFormat.propertyIdentification.propertyAddress}
-                  onChange={(e) =>
-                    setSiteFormat({
-                      ...siteFormat,
-                      propertyIdentification: {
-                        ...siteFormat.propertyIdentification,
-                        propertyAddress: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none"
                 />
               </div>
 
@@ -680,21 +711,18 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Mobile Number (M. NO)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-400 font-semibold">Mobile Number (M. NO)</label>
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                      <Lock className="w-3 h-3 text-amber-400" />
+                      Locked
+                    </span>
+                  </div>
                   <input
                     type="tel"
-                    placeholder="10-digit mobile number"
+                    readOnly
                     value={siteFormat.propertyIdentification.mobileNumber}
-                    onChange={(e) =>
-                      setSiteFormat({
-                        ...siteFormat,
-                        propertyIdentification: {
-                          ...siteFormat.propertyIdentification,
-                          mobileNumber: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none font-mono"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -893,33 +921,19 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Property Type</label>
-                <select
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400 font-semibold">Property Type</label>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    Locked
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  readOnly
                   value={siteFormat.buildingSpecifications.propertyType}
-                  onChange={(e) =>
-                    setSiteFormat({
-                      ...siteFormat,
-                      buildingSpecifications: {
-                        ...siteFormat.buildingSpecifications,
-                        propertyType: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none font-bold"
-                >
-                  <option value="BUILDER FLAT">BUILDER FLAT</option>
-                  <option value="BUILDER FLOOR">BUILDER FLOOR</option>
-                  <option value="ROW HOUSE">ROW HOUSE</option>
-                  <option value="VACANT PLOT">VACANT PLOT</option>
-                  <option value="AUTHORITY FLAT">AUTHORITY FLAT</option>
-                  <option value="DEVELOPER FLAT">DEVELOPER FLAT</option>
-                  <option value="SOCIETY FLAT">SOCIETY FLAT</option>
-                  <option value="INDUSTRIAL">INDUSTRIAL</option>
-                  <option value="SHOP">SHOP</option>
-                  <option value="OFFICE">OFFICE</option>
-                  <option value="INSTITUTIONAL">INSTITUTIONAL</option>
-                  <option value="VILLA">VILLA</option>
-                </select>
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold cursor-not-allowed select-none opacity-90 focus:outline-none"
+                />
               </div>
 
               <div>
@@ -2240,6 +2254,34 @@ export const SurveyWizard: React.FC<SurveyWizardProps> = ({
                 <CheckCircle2 className="w-5 h-5" />
                 <h3 className="text-sm font-bold uppercase tracking-wider">X. Final Remarks & Submissions</h3>
               </div>
+              {(() => {
+                let role = "engineer";
+                try {
+                  const saved = localStorage.getItem("drr_logged_user");
+                  if (saved) {
+                    role = JSON.parse(saved).role;
+                  }
+                } catch (e) {}
+                return role !== "engineer" ? (
+                  <button
+                    type="button"
+                    onClick={handleGenerateGeminiRemarks}
+                    disabled={isGeneratingRemarks}
+                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition-all disabled:opacity-50"
+                  >
+                    {isGeneratingRemarks ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Gemini Analyzing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✨ Gemini Auto-Generate Remarks</span>
+                      </>
+                    )}
+                  </button>
+                ) : null;
+              })()}
             </div>
 
             <div className="space-y-4 text-xs">
