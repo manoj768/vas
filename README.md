@@ -1,191 +1,305 @@
-# Valuation & Site Inspection Studio — Complete Setup & Deployment Guide
+# Valuation & Site Inspection Studio — Complete Setup & Industrial Deployment Guide
 
-A production-grade, full-stack valuation workstation and mobile site inspection platform designed for valuation firms, chartered engineers, banks, NBFCs, and housing finance institutions.
+A production-grade, full-stack valuation workstation, document manager, and mobile site inspection platform designed for valuation firms, chartered engineers, banks, NBFCs, and housing finance institutions.
 
 ---
 
 ## 📑 Table of Contents
-1. [Architecture Overview](#-architecture-overview)
-2. [Quick Start (Local PC Development)](#-quick-start-local-pc-development)
-3. [Database & High-Volume Image Storage Setup](#-database--high-volume-image-storage-setup)
-4. [Running Locally via Docker & Docker Compose (1-Click Stack)](#-running-locally-via-docker--docker-compose-1-click-stack)
-5. [Public Remote Tunneling (Free Cloudflare / Localtunnel)](#-public-remote-tunneling-free-cloudflare--localtunnel)
-6. [Building the Native Android APK (Capacitor)](#-building-the-native-android-apk-capacitor)
-7. [Building the Native iOS App (Xcode)](#-building-the-native-ios-app-xcode)
-8. [Default Role Accounts & Credentials](#-default-role-accounts--credentials)
-9. [Production Deployment & VPS Sizing (1 Lakh Cases/Month)](#-production-deployment--vps-sizing-1-lakh-casesmonth)
-10. [Full Whitepaper & Business Architecture Guide](./docs/ARCHITECTURE_AND_BUSINESS_GUIDE.md)
+1. [🏁 Step-by-Step Beginner-to-Production Quickstart (From Git Clone to Live App)](#-step-by-step-beginner-to-production-quickstart)
+2. [🏛️ Architecture & System Topology](#-architecture--system-topology)
+3. [🏢 Industrial Deployment Methods Comparison (Local Docker vs 1-Click BAT vs Standalone EXE vs Cloud VPS)](#-industrial-deployment-methods-comparison)
+4. [🪟 1-Click Windows Launchers & Standalone Executable (.EXE)](#-1-click-windows-launchers--standalone-executable-exe)
+5. [🗂️ Per-Case Document & Deed Storage Architecture](#-per-case-document--deed-storage-architecture)
+6. [🌐 Remote Tunneling for Global Mobile & WFH Access (Free Cloudflare)](#-remote-tunneling-for-global-mobile--wfh-access-free-cloudflare)
+7. [📱 Mobile App Generation (Android APK & iOS)](#-mobile-app-generation-android-apk--ios)
+8. [🧪 Comprehensive Testing Guide (Web, Mobile, Database & Storage)](#-comprehensive-testing-guide)
+9. [🔄 Git-Based Update Workflow & Dev-to-Prod Pipeline](#-git-based-update-workflow--dev-to-prod-pipeline)
+10. [🔐 Default Role Accounts & Credentials](#-default-role-accounts--credentials)
+11. [☁️ Cloud VPS Production Sizing (1 Lakh Cases / Month)](#-cloud-vps-production-sizing-1-lakh-cases--month)
+12. [Full Whitepaper & Business Architecture Guide](./docs/ARCHITECTURE_AND_BUSINESS_GUIDE.md)
 
 ---
 
-## 🏛️ Architecture Overview
+## 🏁 Step-by-Step Beginner-to-Production Quickstart
+
+Follow these exact steps from cloning the Git repository to final testing and deployment.
+
+### Step 1: Clone the Git Repository
+Open your terminal (Git Bash, Command Prompt, PowerShell, or Linux/macOS Terminal) and run:
+```bash
+# 1. Clone your repository
+git clone https://github.com/YOUR_ORGANIZATION/valuation-studio.git
+
+# 2. Enter the project directory
+cd valuation-studio
+```
+
+---
+
+### Step 2: Choose Your Execution Way
+
+You can run Valuation Studio using any of the **3 supported ways**:
+
+#### 🌟 Way A: 1-Click Windows Desktop (Easiest for Office PC)
+If you are on Windows and have Docker Desktop installed:
+1. Double-click **`START_VALUATION_STUDIO.bat`**.
+2. It automatically starts MongoDB, MinIO Image Storage, and the Node Web App.
+3. It automatically opens your browser at **`http://localhost:3000`**.
+
+#### 🐳 Way B: Standard Docker Compose (Recommended for Servers & Linux/Mac)
+```bash
+# Start all services in the background (App, MongoDB 7.0, MinIO S3)
+docker compose up --build -d
+
+# Check running status
+docker compose ps
+
+# View live streaming logs
+docker compose logs -f app
+```
+- Web Application: **`http://localhost:3000`**
+- MinIO Storage Console: **`http://localhost:9001`** (Login: `minioadmin` / `minioadmin`)
+- MongoDB Database: **`mongodb://localhost:27017`**
+
+#### 💻 Way C: Native Node.js Developer Mode (For Quick Local Tweaks)
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start dev server
+npm run dev
+```
+Open **`http://localhost:3000`** in your browser.
+
+---
+
+### Step 3: Connect Field Engineers via Free Public Tunnel
+
+To allow Android phones in the field (on 4G/5G) and remote staff at home to access your Office Server PC:
+
+```bash
+# Run this on your Server PC
+npx cloudflared tunnel --url http://localhost:3000
+```
+Cloudflare will output a public HTTPS address (e.g., `https://rapid-valuation-demo.trycloudflare.com`).
+Share this link with your field engineers or configure it into the Android APK.
+
+---
+
+### Step 4: Generate the Android APK for Site Inspectors
+
+1. Open `capacitor.config.ts` and set your tunnel or server URL:
+   ```typescript
+   const BACKEND_PLACEHOLDER_URL = "https://your-tunnel-subdomain.trycloudflare.com";
+   ```
+2. Build and sync web assets with the Android native project:
+   ```bash
+   npm run build
+   npx cap sync
+   npm run cap:android
+   ```
+3. In Android Studio: Click **Build $\rightarrow$ Build Bundle(s) / APK(s) $\rightarrow$ Build APK(s)**.
+4. Distribute `android/app/build/outputs/apk/debug/app-debug.apk` to site inspectors.
+
+---
+
+## 🏛️ Architecture & System Topology
 
 The system operates from a single, unified codebase serving three targets:
 - **Office Desktop Portal**: Chrome / Edge browser workstation for Admins, Reviewers, and CAD Drafters.
 - **Field Inspector Android APK**: Native mobile app with hardware Camera, GPS watermarking, and offline storage.
 - **Field Inspector iOS App**: Native iPhone app built with Capacitor and Xcode.
 - **Backend API & AI Engine**: Node.js / Express server proxying Gemini 3.6 Flash for document OCR and automated appraisal remarks.
-- **Database**: Open-source MongoDB Community Server with Mongoose connection pooling (scalable to 1,00,000+ cases/month).
+- **Database Layer**: MongoDB 7.0 Community Server with connection pooling (`minPoolSize: 10`, `maxPoolSize: 50`) and compound indexes.
+- **Object Storage Layer**: MinIO (S3-Compatible) dedicated container handling 15+ Lakh monthly GPS photos and high-resolution deeds.
 
----
-
-## 💻 Quick Start (Local PC Development)
-
-### 1. Prerequisites
-- **Node.js (v18 or v20 LTS)**: [Download Node.js](https://nodejs.org/)
-- **Git** (optional): [Download Git](https://git-scm.com/)
-
-### 2. Installation
-Extract or clone the project on your PC, open a terminal in the folder, and run:
-
-```bash
-# 1. Install all dependencies
-npm install
-
-# 2. Start development server
-npm run dev
 ```
-
-The application will be live at: **`http://localhost:3000`**
-
-### 3. Environment Variables (`.env`)
-Create a `.env` file in the root folder (or edit the existing one):
-
-```env
-PORT=3000
-NODE_ENV=development
-
-# (Optional) MongoDB Connection String
-# Leave blank for local in-memory fallback, or supply a MongoDB URI:
-MONGODB_URI=mongodb://localhost:27017/evalo_valuation
-MONGODB_DB_NAME=evalo_valuation
-
-# (Optional) Gemini API Key for AI Auto-Remarks & OCR
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# JWT Secret for Auth Sessions
-JWT_SECRET=evalo_production_jwt_secret_2026
-
-# Storage Mode (local saves images to ./uploads/sites/)
-STORAGE_DRIVER=local
+                       ┌────────────────────────────────────────────────────────┐
+                       │               YOUR OFFICE SERVER PC (Local)            │
+                       │                                                        │
+                       │  [ START_VALUATION_STUDIO.bat ]                        │
+                       │      ├── App Web & API Server (:3000)                  │
+                       │      ├── MongoDB 7.0 Database (:27017)                 │
+                       │      └── MinIO S3 Image Storage (:9000 & :9001)        │
+                       │                                                        │
+                       │  [ Cloudflare Tunnel / Ngrok ]                         │
+                       │      └── Gives: https://your-office.trycloudflare.com  │
+                       └────────────────────────────────────────────────────────┘
+                                                    ▲
+                                                    │ (Secure Remote HTTPS Tunnel)
+                   ┌────────────────────────────────┼───────────────────────────────┐
+                   │                                │                               │
+                   ▼                                ▼                               ▼
+    📱 Android Phones (Field)          💻 Office Staff Laptops              🏠 Work from Home Staff
+    Site Engineers submit GPS          Reviewers & Drafters in            Admins checking MIS reports
+    photos & measurements live         the office working on CAD          from home or branches
 ```
 
 ---
 
-## 🗄️ Database & High-Volume Image Storage Setup
+## 🏢 Industrial Deployment Methods Comparison
 
-The application features a decoupled architecture separating high-speed metadata from heavy media attachments:
-
-### 1. MongoDB Setup (Metadata & Case State)
-The system includes an **intelligent auto-fallback adapter**:
-- **Without MongoDB**: Runs seamlessly using persistent filesystem JSON stores and in-memory caches.
-- **With MongoDB**: Automatically activates connection pooling (`minPoolSize: 10`, `maxPoolSize: 50`), compound indexes, and full-text search.
-- **Local Connection**: `MONGODB_URI=mongodb://localhost:27017/evalo_valuation`
-- **Cloud Cluster**: `MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/evalo_valuation`
-
-### 2. MinIO / S3 Object Storage Setup (High-Volume Inspection Photos)
-To handle 15+ Lakh monthly field photos without bloating the database:
-- **Driver**: Set `STORAGE_DRIVER=s3` in `.env`
-- **Endpoint**: `S3_ENDPOINT=http://localhost:9000` (or AWS S3 / Cloudflare R2 endpoint)
-- **Bucket**: `S3_BUCKET_NAME=valuation-photos`
-- **Access & Secret Keys**: `S3_ACCESS_KEY=minioadmin` / `S3_SECRET_KEY=minioadmin`
-- The system uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for direct, high-throughput client and server uploads.
+| Deployment Method | Best For | Prerequisites | Pros | Cons |
+| :--- | :--- | :--- | :--- | :--- |
+| **🐳 Docker Compose (`docker compose up -d`)** | **Office Server PC / Production VPS** | Docker Desktop / Docker Engine | All-in-one stack (App + MongoDB + MinIO), auto-restarts on reboot, zero data loss updates via Git. | Requires Docker installed. |
+| **🪟 1-Click BAT (`START_VALUATION_STUDIO.bat`)** | **Non-technical Office Staff on Windows** | Windows 10/11 + Docker | 1-click startup, auto-opens Chrome/Edge browser, auto-fallback to Node.js. | Windows only. |
+| **📦 Standalone EXE (`ValuationStudio.exe`)** | **Single PC offline demo / portable testing** | Node.js (to compile) | Single executable file, no Docker required. | Must start MongoDB separately for large scale. |
+| **☁️ Cloud VPS (Ubuntu + Docker / PM2)** | **Large Distributed Firm (20+ Branches)** | Linux Cloud VPS (Hetzner / AWS / DigitalOcean) | 99.99% uptime, static domain name, multi-branch scaling. | Monthly server subscription. |
 
 ---
 
-## 🌐 Public Remote Tunneling (Free Cloudflare / Localtunnel)
+## 🪟 1-Click Windows Launchers & Standalone Executable (.EXE)
 
-Expose your local PC server to a secure public HTTPS URL so field engineers can test with real mobile device GPS and Camera sensors:
+Ready-to-use batch scripts and executable builders are included in the root folder so you never need to type terminal commands:
 
-### Method 1: Cloudflare Quick Tunnel (Recommended — 100% Free, No Limits)
+| Launcher Script | What It Does |
+| :--- | :--- |
+| **`START_VALUATION_STUDIO.bat`** | **Double-click to start.** Auto-detects Docker Desktop, launches the full stack (App + MongoDB + MinIO), and opens your browser automatically to `http://localhost:3000`. |
+| **`STOP_VALUATION_STUDIO.bat`** | **Double-click to stop.** Gracefully stops all background containers and preserves 100% database integrity. |
+| **`BUILD_WINDOWS_EXE.bat`** | **Double-click to compile.** Packages the entire full-stack app into a standalone Windows 64-bit binary at `dist\ValuationStudio.exe`. |
+
+---
+
+## 🗂️ Per-Case Document & Deed Storage Architecture
+
+All property documents, deeds, sanctioned maps, and physical site inspection photos are segregated on an **isolated, per-case basis**.
+
+```text
+/uploads/cases/{caseId}/
+  ├── 📄 deeds/
+  │     ├── title_deed_registered.pdf
+  │     ├── sale_deed_mother_copy.pdf
+  │     ├── property_tax_receipt.pdf
+  │     └── electricity_meter_bill.jpg
+  │
+  ├── 📐 sanctioned_plans/
+  │     ├── authority_sanction_map.pdf
+  │     ├── layout_plan_blueprint.png
+  │     └── cad_drafter_drawing.dwg
+  │
+  ├── 📸 site_inspection_photos/
+  │     ├── front_elevation_gps_watermarked.jpg
+  │     ├── road_width_approach_18ft.jpg
+  │     ├── interior_hall_flooring.jpg
+  │     ├── kitchen_amenities.jpg
+  │     └── electricity_meter_box.jpg
+  │
+  ├── 🛰️ geospatial/
+  │     ├── esri_satellite_boundary_capture.png
+  │     └── openstreetmap_surroundings.png
+  │
+  └── 📑 generated_reports/
+        ├── SBI_Valuation_Report_Final.docx
+        ├── HDFC_Rate_Derivation_Sheet.xlsx
+        └── Photo_Annexure_Matrix.pdf
+```
+
+### Storage Offloading Matrix:
+- **MongoDB**: Stores case metadata, workflow state, timestamps, GPS coordinates, and file path URIs (sub-10ms queries).
+- **MinIO / Disk**: Stores heavy binary files (PDFs, high-res photos, DWG plans), completely preventing database RAM bloat.
+
+---
+
+## 🌐 Remote Tunneling for Global Mobile & WFH Access (Free Cloudflare)
+
+To allow Android phones in the field and remote reviewers to connect to your Office Server PC:
+
 ```bash
-# Windows / Mac / Linux
+# Start a free, unlimited Cloudflare Tunnel
 npx cloudflared tunnel --url http://localhost:3000
 ```
-*Output: `https://your-random-subdomain.trycloudflare.com` (Share this link with field staff).*
-
-### Method 2: Localtunnel (Instant)
-```bash
-npx localtunnel --port 3000
-```
+- **Tunnel Output**: `https://your-custom-subdomain.trycloudflare.com`
+- **Security**: All traffic is encrypted over HTTPS with DDoS protection.
 
 ---
 
-## 📱 Building the Native Android APK (Capacitor)
+## 📱 Mobile App Generation (Android APK & iOS)
 
-Convert the web app into a native Android APK with direct access to hardware GPS and camera:
-
-### 1. Prerequisites
-- **Android Studio**: [Download Android Studio](https://developer.android.com/studio)
-- **Java JDK 17+**
-
-### 2. Configure Backend URL Placeholder (1 Quick Edit)
-Open `capacitor.config.ts` and replace the placeholder URL with your live tunnel or backend URL:
+### 1. Configure Backend URL in `capacitor.config.ts`
+Open `capacitor.config.ts` and set your Server PC's tunnel URL:
 ```typescript
-// Replace this dummy placeholder in capacitor.config.ts:
+// capacitor.config.ts
 const BACKEND_PLACEHOLDER_URL = "https://your-tunnel-name.trycloudflare.com"; // OR "http://192.168.1.100:3000"
 ```
 
-### 3. Generate Android Project & Build APK
+### 2. Build the Android APK in 3 Steps
 ```bash
-# 1. Add the Android platform (run once)
-npx cap add android
-
-# 2. Build the production React bundle
+# 1. Build web bundle & sync with Android
 npm run build
-
-# 3. Sync web assets & URL configuration with native Android project
 npx cap sync
 
-# 4. Open in Android Studio
+# 2. Open Android Studio
 npm run cap:android
 ```
-
-### 4. Inside Android Studio
-1. Wait for the Gradle project sync to finish.
-2. In the top menu, click **Build $\rightarrow$ Build Bundle(s) / APK(s) $\rightarrow$ Build APK(s)**.
-3. Locate the generated `.apk` in `android/app/build/outputs/apk/debug/app-debug.apk`.
-4. Install this file on field engineers' Android phones.
+3. Inside Android Studio: Click **Build $\rightarrow$ Build Bundle(s) / APK(s) $\rightarrow$ Build APK(s)**.
+4. Locate the generated `.apk` in `android/app/build/outputs/apk/debug/app-debug.apk` and install it on engineers' phones.
 
 ---
 
-## 🍎 Building the Native iOS App (Xcode)
+## 🧪 Comprehensive Testing Guide
 
-### 1. Prerequisites (macOS only)
-- **macOS** with **Xcode 15+** installed.
-- **Cocoapods**: `brew install cocoapods` or `sudo gem install cocoapods`.
+Follow this checklist to test every module before putting the system into active production:
 
-### 2. Configure Backend URL Placeholder
-Make sure `capacitor.config.ts` has your live backend or tunnel URL:
-```typescript
-const BACKEND_PLACEHOLDER_URL = "https://your-tunnel-name.trycloudflare.com";
-```
+### 1. Web Portal & Authentication Test
+1. Open `http://localhost:3000` in Chrome/Edge.
+2. Log in using each role credential (Admin, Reviewer, Drafter, Engineer).
+3. Verify the role-specific dashboard navigation and permission gates.
 
-### 3. Build & Launch in Xcode
+### 2. Bank Valuation Workstation Test
+1. Click **"+ New Valuation Case"**.
+2. Select **State Bank of India (SBI)** or **HDFC Bank** template.
+3. Fill in property land area, built-up rate, and depreciation.
+4. Verify real-time fair market value, guideline value, and distress realization calculations.
+5. Generate the official Word (`.docx`) and Excel (`.xlsx`) appraisal reports.
+
+### 3. CAD Drafting & Satellite GIS Test
+1. In any case, open the **CAD & Floor Plan Drafter** tab.
+2. Draw property boundary polygons, add dimension annotations (ft/m), and export CAD canvas.
+3. Open the **Satellite Map & GIS** tab, search a landmark, and capture the GPS boundary polygon.
+
+### 4. Android Mobile Inspection Test
+1. On an Android phone, launch the app or open the tunnel URL.
+2. Log in as Site Engineer (`ratnesh.delhi@drrconsultants.in`).
+3. Take a site photo using the camera.
+4. Verify that real-time **GPS Coordinates (Latitude/Longitude), Compass Bearing, and Date-Time Stamp** are watermarked on the photo.
+5. Toggle Airplane Mode, save an inspection draft offline, re-enable internet, and verify automatic cloud sync.
+
+### 5. Storage & Database Persistence Test
+1. Upload a property deed PDF and 4 site inspection photos.
+2. Check the MinIO console at `http://localhost:9001` to confirm files are stored in bucket `valuation-photos`.
+3. Restart the Docker container (`docker compose restart`).
+4. Re-open the case in your browser and confirm all deeds, images, and calculations remain intact.
+
+---
+
+## 🔄 Git-Based Update Workflow & Dev-to-Prod Pipeline
+
+### Updating Running Containers via Git
+When you make updates in Git, redeploy your running server in 1 single command:
+
 ```bash
-# 1. Add the iOS platform (run once)
-npx cap add ios
-
-# 2. Build React bundle & sync
-npm run build
-npx cap sync
-
-# 3. Open in Xcode
-npm run cap:ios
+git pull origin main && docker compose up --build -d
 ```
+*Note: Your MongoDB database and uploaded files remain 100% safe and intact across rebuilds because they live in persistent named volumes.*
 
-### 3. Inside Xcode
-1. Select your target device or iPhone Simulator.
-2. Under **Signing & Capabilities**, assign your Apple Developer Team.
-3. Click the **Play / Run** button to test, or click **Product $\rightarrow$ Archive** to publish to Apple TestFlight.
+### Branching Strategy (Dev $\rightarrow$ Testing $\rightarrow$ Main/Prod)
+1. **`main` Branch**: Stable live production instance (Runs on Port `3000`).
+2. **`dev` Branch**: Active development & sandbox QA testing (Runs on Port `3001` via `docker-compose.dev.yml`).
+
+```bash
+# To deploy Dev testing environment:
+chmod +x deploy.sh
+./deploy.sh dev
+
+# To deploy Live Production environment:
+./deploy.sh prod
+```
 
 ---
 
 ## 🔐 Default Role Accounts & Credentials
 
-The platform includes pre-configured demo credentials with role-based access:
-
-| Role | Email | Password | Allowed Permissions |
+| Role | Email | Password | Primary Workflow Permissions |
 | :--- | :--- | :--- | :--- |
 | **Admin** | `admin@drrconsultants.in` | `admin123` | Full access: User management, branches, bank formats, approvals. |
 | **Reviewer / QA** | `suresh.lucknow@drrconsultants.in` | `reviewer123` | Technical QA, AI remark synthesis, approve/reject survey reports. |
@@ -194,106 +308,19 @@ The platform includes pre-configured demo credentials with role-based access:
 
 ---
 
-## 🐳 Running Locally via Docker & Docker Compose (1-Click Stack)
+## ☁️ Cloud VPS Production Sizing (1 Lakh Cases / Month)
 
-If you have Docker and Docker Compose installed on your PC, you can spin up the entire application along with **MongoDB 7.0 (Database)** and **MinIO (S3 Object Storage for 15+ Lakh monthly images)** using a single command—no manual dependency or database installation required!
+If you decide to host on a public Cloud VPS (Hetzner, DigitalOcean, AWS EC2, Contabo):
 
-### 1. Prerequisites
-- **Docker Desktop** installed and running on Windows, macOS, or Linux.
-
-### 2. Run with Docker Compose
-Open your terminal in the root project folder and run:
-
-```bash
-docker compose up --build -d
-```
-
-This will automatically launch three coordinated services:
-1. **Valuation Studio App**: Accessible at **`http://localhost:3000`**.
-2. **MongoDB 7.0 Database**: Internal container communication with persistent volume storage (`port 27017`).
-3. **MinIO S3 Object Storage API**: Dedicated image upload service (`port 9000`).
-4. **MinIO Web Console**: Storage explorer at **`http://localhost:9001`** (Login: `minioadmin` / `minioadmin`).
-
-### 3. Management Commands
-- **View live streaming logs**: `docker compose logs -f`
-- **Stop containers**: `docker compose stop`
-- **Restart containers**: `docker compose restart`
-- **Tear down completely (preserving data volumes)**: `docker compose down`
-
----
-
-## 🔀 Git Branching Strategy & Dev-to-Prod Pipeline
-
-To ensure that newly written features, inspection fields, and updates are thoroughly tested before going live to field engineers and bank portals, follow this industry-standard **Dev $\rightarrow$ Testing $\rightarrow$ Main/Prod** workflow:
-
-```
-[ Feature Branches ] ---> Merge into [ dev ] ---> QA / Field Testing (Port 3001) ---> Merge into [ main ] ---> Live Production (Port 3000)
-```
-
-### 1. The Environment Separation
-| Parameter | `dev` Branch (Testing) | `main` Branch (Production) |
-| :--- | :--- | :--- |
-| **Docker Compose Config** | `docker-compose.dev.yml` | `docker-compose.prod.yml` |
-| **App Port** | `http://localhost:3001` | `http://localhost:3000` |
-| **Database** | Sandbox `evalo_valuation_dev` (:27018) | Live `evalo_valuation_prod` (:27017) |
-| **Image Bucket** | `valuation-photos-dev` | `valuation-photos-prod` |
-| **Purpose** | Internal QA, field testing, test bank files | Real client & live banking operations |
-
-### 2. Automated 1-Command Deployment Script
-A helper script `./deploy.sh` is provided in the repository to automate branch checkout, pulling latest Git commits, and zero-downtime container redeployment:
-
-```bash
-# 🧪 Deploy & test latest Dev branch changes:
-chmod +x deploy.sh
-./deploy.sh dev
-
-# 🚀 Once tested and approved, deploy to live Production:
-./deploy.sh prod
-```
-
-### 3. Standard Git Release Flow
-```bash
-# Step 1: Work on your feature or bugfix
-git checkout dev
-git pull origin dev
-# ... make your code changes ...
-git commit -am "feat: added new bank format and photo category"
-git push origin dev
-
-# Step 2: Test on the Dev container (Port 3001)
-./deploy.sh dev
-
-# Step 3: Once QA passes, merge into main and release to Production (Port 3000)
-git checkout main
-git merge dev
-git push origin main
-./deploy.sh prod
-```
-
----
-
-## 🚀 Production Deployment & VPS Sizing (1 Lakh Cases/Month)
-
-### Hardware Sizing for 1 Lakh Cases / Month:
 - **Throughput**: ~3,333 cases/day ($\approx$ 15–20 peak writes/sec).
-- **CPU**: 4 to 8 vCPU
-- **RAM**: 16 GB (keeps working compound indexes resident in memory).
-- **Disk**: 100 GB – 250 GB NVMe SSD.
+- **Recommended Sizing**: 4 to 8 vCPU, 16 GB RAM, 150 GB+ NVMe SSD.
 - **Operating System**: Ubuntu 22.04 / 24.04 LTS.
-
-### Production Run Commands
-```bash
-# 1. Compile backend & frontend
-npm run build
-
-# 2. Launch production daemon (PM2 recommended)
-npm run start
-# OR with PM2 process manager:
-pm2 start dist/server.cjs --name "valuation-studio"
-```
+- **Process Manager**: Docker Compose or `pm2 start dist/server.cjs --name "valuation-studio"`.
 
 ---
 
-## 📄 License & Open-Source Details
-- Built with **React 18**, **Tailwind CSS**, **Express.js**, **Mongoose / MongoDB Community**, **Capacitor**, and **ExcelJS / Docxtemplater**.
-- Fully self-hostable with zero recurring database licensing costs.
+## 📄 License & Technical Stack
+- **Frontend**: React 18, Tailwind CSS, Lucide Icons, Canvas CAD Engine, Leaflet/MapLibre GIS.
+- **Backend**: Node.js, Express, Mongoose, @aws-sdk/client-s3, ExcelJS, Docxtemplater.
+- **Mobile**: Capacitor 6 (Android & iOS).
+- **Database & Storage**: MongoDB 7.0 Community & MinIO S3 Object Storage (100% Free & Open-Source).
