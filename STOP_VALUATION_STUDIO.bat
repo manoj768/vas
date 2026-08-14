@@ -1,9 +1,14 @@
 @echo off
-title Stop Valuation ^& Inspection Studio
+setlocal enabledelayedexpansion
+
+:: Ensure the script runs in the directory where the file is located
+cd /d "%~dp0"
+
+title Stop Valuation & Inspection Studio
 color 0C
 
 echo ===============================================================================
-echo            STOPPING VALUATION ^& SITE INSPECTION STUDIO
+echo            STOPPING VALUATION & SITE INSPECTION STUDIO
 echo ===============================================================================
 echo.
 
@@ -18,4 +23,8 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 echo.
+echo ===============================================================================
+echo Done! Press any key to close this window.
+echo ===============================================================================
 pause
+
