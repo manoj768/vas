@@ -176,6 +176,32 @@ The platform includes pre-configured demo credentials with role-based access:
 
 ---
 
+## 🐳 Running Locally via Docker & Docker Compose
+
+If you have Docker and Docker Compose installed on your PC, you can spin up the entire application along with **MongoDB (Database)** and **MinIO (S3 Object Storage for 15+ Lakh monthly images)** using a single command—no manual setup required!
+
+### 1. Prerequisites
+- **Docker Desktop** installed and running on Windows, macOS, or Linux.
+
+### 2. Run with Docker Compose
+Open your terminal in the root project folder and run:
+
+```bash
+docker compose up --build -d
+```
+
+This will automatically start:
+1. **Valuation Studio App Container** at **`http://localhost:3000`**.
+2. **MongoDB 7.0 Database Container** for cases, users, and metadata (`port 27017`).
+3. **MinIO Object Storage Container** for high-volume GPS inspection photos & satellite captures (`port 9000` API, `port 9001` Management Console).
+
+### 3. Management Commands
+- **View logs**: `docker compose logs -f`
+- **Stop containers**: `docker compose stop`
+- **Tear down completely**: `docker compose down`
+
+---
+
 ## 🚀 Production Deployment & VPS Sizing (1 Lakh Cases/Month)
 
 ### Hardware Sizing for 1 Lakh Cases / Month:
